@@ -1,0 +1,1460 @@
+﻿///$tab Main
+SET ThousandSep=' ';
+SET DecimalSep=',';
+SET MoneyThousandSep=' ';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='# ##0,00 €;-# ##0,00 €';
+SET TimeFormat='hh:mm:ss';
+SET DateFormat='DD/MM/YYYY';
+SET TimestampFormat='DD/MM/YYYY hh:mm:ss[.fff]';
+SET MonthNames='janv.;févr.;mars;avr.;mai;juin;juil.;août;sept.;oct.;nov.;déc.';
+SET DayNames='lun.;mar.;mer.;jeu.;ven.;sam.;dim.';
+
+//let today = PurgeChar(date(today()-1),'/');
+let today = PurgeChar(date(today()),'/');
+
+SWITCH 'server'
+
+case 'local'
+let qvd_path = '../datawhare/Movex/' & $(today);
+ODBC CONNECT TO [MOVEX PRD] (XUserId is EEaMbCFJTaAB, XPassword is CPBecCFJTaFB);
+case 'server'
+let qvd_path = '../../DataStore/Extract/V12/Prod/Stock/' & $(today);
+ODBC CONNECT32 TO [V12 PRD] (XUserId is aIfBcCFJTCOB, XPassword is LNVJYCFJTKZB);
+
+ENDSWITCH
+
+// Switch case selon si on tape dans l'infocentre ou dans V12 , (Table MitLOCK)
+// Les valeurs possibles adsmises sont infocentre ou Movex, c'est donc dans la valeur apres le switch que l'on change d'environnement.
+
+//Switch 'Movex'
+///$tab Infocntre
+//CASE 'infocentre'
+//
+//ODBC CONNECT TO [MOVEX PRD] (XUserId is fNLWWCFJTCOA, XPassword is RUVddCFJTSJA);
+//
+//
+//LIVRES_NON_FACT:
+//select 
+//	uadivi as "STE",
+//	UBITNO as "REF",
+//	MMHIE1 as "TECHNO",
+//	UACUNO as "CLIENT PAYEUR", 
+//	OKCUNM,UADLIX as "BL",
+//	UBRGDT, 
+//	UAIVDT as "DATE FACTURE",
+//	UBWHLO as "DEPOT" ,
+//	UBFACI as "ETABLISSEMENT",
+//	UAORST as "STATUS",
+//	(UBDLQT+ubivqt) as "QT LIVRE" ,
+//	UBNEPR as "PRIX",
+//  UBNEPR*(UBDLQT+ubivqt) as "MONTANT" ,
+//	UACUCD as "CURRENCY" ,
+//	ACCSU1 as "CD",
+//	UBSAPR as "Prix Vente",
+//	uadldt,
+//	uaacdt,
+//	uaivno,
+////ACREFI,
+//	UAORTP 
+//FROM mvxcdta01.ODHEAD h,  mvxcdta01.MITMAS m, mvxcdta01.OCUSMA o, mvxcdta01.ODLINE l 
+//LEFT JOIN projeis.acrefi A ON A.ACREFI = l.UBITNO AND A.ACDIVI = right(l.ubdivi,2)
+////LEFT JOIN  mvxcdta01.MITFAC ON M9ITNO = l.UBITNO AND M9DIVI  = l.ubdivi
+//where 
+////UBRGDT > '20140901' and
+// l.UBORNO = h.UAORNO
+//and l.UBDLIX= h.UADLIX
+//AND l.UBWHLO = h.UAWHLO
+//and l.UBIVNO = h.UAIVNO
+//and l.UBFACI = h.UAFACI
+//AND M.MMITNO = l.UBITNO
+//AND o.OKCUNO = h.UACUNO
+////and UBDIVI ='001'
+//and UAORST >= '60'
+//and UBPRCH = '0'
+//and UAORTP not in ('PRF','2PR','3PR')
+////and UADIVI ='001' 
+//
+//order by UAPYNO, UBITNO
+//;
+//
+///$tab Infocentre2
+//
+//ODBC CONNECT TO [bdd EIS] (XUserId is UGZZVCFJTKdB, XPassword is KQGBRCFJTKFB);
+//
+//STOCK:
+//SQL SELECT
+//	//distinct  
+//	CSU1 ,//****
+//    DIVI ,//"STE",
+//    FACI ,//"ETAB",
+//    HIE1,//"TECHNO FR",//****
+//    IDDT,
+//    ITCL ,//"GRPE TECHNO",
+//    ITDS ,
+//    ITGR ,
+//    ITNO , //"REF",
+//    NSTQ ,
+//    ODDT ,
+//    STAS ,
+//    UNMS ,
+//    WHLO "DEPOT" ,
+//    XDATE "DATE_EXTRACT" ,
+//    YRQT "QTY CONSUMPTION" 
+//FROM F0079D7R.PROJEIS.DRCAS530
+//order by ITNO
+//;
+//
+//store LIVRES_NON_FACT  into ../datawhare/LIVRESNONFACT.qvd ;
+//Store STOCK into  ../datawhare/STOCK.qvd ;
+//
+//
+///$tab Mvx_MITLOC
+//Case 'Movex'
+//trace lecture de V12 ;
+//
+//
+//
+//
+//
+//STOCK :
+//SQL SELECT
+//    MLCONO "DIVI", //DIVISION
+//    MLFACI "FACI", //Etablissement
+//    MLIDDT "IDDT", //Date de derniere entrée
+//    MLITNO "ITNO", //Code Articl
+//    MLODDT "ODDT", //Date derniere sortie
+//    MLSTAS "STAS", //Status - identité de stock
+//    MLSTQT "NSTQ", //Stock  approuvé
+//    MLWHLO "DEPOT" ,//Depot 
+//    MLBANO,
+//    MLCAMU,     
+//    MLRGTM
+// // MLALOC,rrrrrrrrrrr
+// //   MLALQT,//??
+// //   MLATNR,
+// //   MLAUDD,
+// //   MLAUDE,
+//
+// //   MLBRE2,Référence de lot 2
+// //   MLBREF,Référence de lot 1
+// //   MLBREM,//remarques
+//
+// //   MLCHID,
+// //   MLCHNO,
+// //   MLCNDT, //date de suivi
+//
+////    MLDTID, //Identité donnée
+////
+////
+////    MLINDT, //Date de dernier inventaire
+////    MLINON, 
+////
+////    MLLMDT, //Date changement
+////
+////    MLPACT, 
+////    MLPLQT, //Qté liste de prelevement Unm Base
+////    MLPOCY, 
+////    MLPPRI, Priorité de prlevement.
+////    MLPRDT, 
+////    MLPUAB,
+////    MLRCLN,
+////    MLRCLS,
+////    MLREPN,//N° de recpetion
+////    MLRGDT,//Date de saisie
+////
+////    MLSEDT, //Date de vente
+////    MLSLTP, //Zone de stockage
+////
+////    MLSTES,
+////    MLSTQM, //Stock disponible Unm Principale
+////
+////    MLTXID, //ID_TExte
+////
+////    MLWHLT,
+////    MLWHSL
+//FROM F0079D7R.MVXCDTA01.MITLOC
+////where MLWHLO < 899 and MLWHLO not in(10,20)
+//where MLCONO = 200
+//;
+//
+//
+//Store STOCK into  $(qvd_path)_STOCK.qvd ;
+//
+//
+//
+///$tab Mvx-MitMAS
+//MITMAS:
+//SQL SELECT 
+//    MMSTAT, //statut artcile
+//    MMHIE1, //TEchno produit
+//    MMITDS,
+//    MMUNMS,
+//    MMITCL,
+//    MMITNO,
+//    MMITGR	//groupe article
+////	MMAAD0,
+////    MMAAD1,
+////    MMACHK,
+////    MMACRF,
+////    MMACTI,
+////    MMAEQY,
+////    MMAES2,
+////    MMAESC,
+////    MMALUC,
+////    MMALUN,
+////    MMAMOR,
+////    MMAMPT,
+////    MMARPA,
+////    MMARPR,
+////    MMARR1,
+////    MMATMN,
+////    MMATMO,
+////    MMAUTC,
+////    MMAWDY,
+////    MMBACD,
+////    MMBGRP,
+////    MMBOGR,
+////    MMBPEY,
+////    MMBUAR,
+////    MMBYPR,
+////    MMCCO1,
+////    MMCCO2,
+////    MMCCO3,
+////    MMCETY,
+////    MMCFI1,
+////    MMCFI2,
+////    MMCFI3,
+////    MMCFI4,
+////    MMCFI5,
+////    MMCHCD,
+////    MMCHCL,
+////    MMCHID,
+////    MMCHNO,
+////    MMCONC,
+////    MMCONO,
+////    MMCUCD,
+////    MMCUCS,
+////    MMDCCD,
+////    MMDIGI,
+////    MMDIM1,
+////    MMDIM2,
+////    MMDIM3,
+////    MMDIRR,
+////    MMDOID,
+////    MMDPID,
+////    MMDTID,
+////    MMDWNO,
+////    MMECAC,
+////    MMECCC,
+////    MMECFL,
+////    MMECMA,
+////    MMECVE,
+////    MMEPCD,
+////    MMETRF,
+////    MMEVGR,
+////    MMEXPD,
+////    MMFCCM,
+////    MMFCU1,
+////    MMFEBA,
+////    MMFRAG,
+////    MMFRE3,
+////    MMFRE4,
+////    MMFUDS,
+////    MMFUNC,
+////    MMGRMT,
+////    MMGRP1,
+////    MMGRP2,
+////    MMGRP3,
+////    MMGRP4,
+////    MMGRP5,
+////    MMGRTI,
+////    MMGRTS,
+////    MMGRWE,
+////    MMHAC1,
+////    MMHAC2,
+////    MMHAC3,
+////    MMHAZI,
+////    MMHDPR,
+//     
+////    MMHIE2,
+////    MMHIE3,
+////    MMHIE4,
+////    MMHIE5,
+////    MMIACP,
+////    MMIEAA,
+////    MMINDI,
+//     
+//
+////    MMITGR,
+//     
+////    MMITRC,
+////    MMITRF,
+////    MMITTY,
+////    MMLAMA,
+////    MMLEAI,
+////    MMLMDT,
+////    MMMABU,
+////    MMMAPL,
+////    MMMAPN,
+////    MMMBFR,
+////    MMMBSR,
+////    MMMBUR,
+////    MMMDIR,
+////    MMMES1,
+////    MMMES2,
+////    MMMES3,
+////    MMMES4,
+////    MMMPGM,
+////    MMMVA1,
+////    MMMVA2,
+////    MMMVA3,
+////    MMMVA4,
+////    MMNESA,
+////    MMNEWE,
+////    MMNPTO,
+////    MMNSUF,
+////    MMORTY,
+////    MMOTDI,
+////    MMPDCC,
+////    MMPEQ1,
+////    MMPEQ2,
+////    MMPEQ3,
+////    MMPEQ4,
+////    MMPET1,
+////    MMPET2,
+////    MMPET3,
+////    MMPET4,
+////    MMPLCD,
+////    MMPLMZ,
+////    MMPOCY,
+////    MMPPDT,
+////    MMPPUN,
+////    MMPRCM,
+////    MMPRGP,
+////    MMPRGR,
+////    MMPROD,
+////    MMPRVG,
+////    MMPUCD,
+////    MMPUPR,
+////    MMPUUN,
+////    MMQACD,
+////    MMRESP,
+////    MMRGDT,
+////    MMRGTM,
+////    MMRIDC,
+////    MMRIDE,
+////    MMSACD,
+////    MMSALE,
+////    MMSAPR,
+////    MMSCGR,
+////    MMSEPR,
+////    MMSMFI,
+////    MMSPAC,
+////    MMSPDT,
+////    MMSPE1,
+////    MMSPE2,
+////    MMSPE3,
+////    MMSPE4,
+////    MMSPE5,
+////    MMSPUC,
+////    MMSPUN,
+//      
+////    MMSTCD,
+////    MMSTCN,
+////    MMSTCS,
+////    MMSTNC,
+////    MMSTUN,
+////    MMSUNO,
+////    MMTANK,
+////    MMTAXC,
+////    MMTBFR,
+////    MMTBSR,
+////    MMTBUR,
+////    MMTOHI,
+////    MMTORE,
+////    MMTPCD,
+////    MMTPLI,
+////    MMTRPA,
+////    MMTXID,
+//
+////    MMUNNN,
+////    MMUNPA,
+////    MMVOL3,
+////    MMVTCP,
+////    MMVTCS,
+////    MMWADY,
+////    MMWAL1,
+////    MMWAL2,
+////    MMWAL3,
+////    MMWAL4,
+////    MMWAPC,
+////    MMWSCA
+//FROM F0079D7R.MVXCDTA01.MITMAS;
+//
+//Store MITMAS into   $(qvd_path)_MITMAS.qvd;
+///$tab MITFAC
+//MITFAC : 
+//SQL SELECT
+//    M9ITNO,
+//    M9FACI,
+//    M9CONO,
+//    M9APPR //prix de revient
+////    M9APPR,
+////    M9AUGE,
+////    M9BQTM,
+////    M9BQTY,
+////    M9CHID,
+////    M9CHNO,
+////    M9COCD,
+////
+////    M9CPDC,
+////    M9CPL0,
+////    M9CPL1,
+////    M9CPL2,
+////    M9CPRE,
+////    M9CPRI,
+////    M9CSNO,
+////    M9DIDF,
+////    M9DIDY,
+////    M9DLEF,
+////    M9DLET,
+////    M9DTID,
+////    M9ECAR,
+////    M9ECCC,
+////    M9EDEC,
+////    M9EVGR,
+////    M9EXPC,
+////
+////    M9FANO,
+////    M9FANQ,
+////    M9FANR,
+////    M9FATM,
+////    M9GRTI,
+////
+////    M9JITF,
+////    M9LAMA,
+////    M9LEA4,
+////    M9LLCM,
+////    M9LMDT,
+////    M9MARC,
+////    M9MOLL,
+////    M9OPFQ,
+////    M9ORCO,
+////    M9PLAP,
+////    M9PLUP,
+////    M9PPL0,
+////    M9PPL1,
+////    M9PPL2,
+////    M9PRCM,
+////    M9PRRA,
+////    M9REWH,
+////    M9RGDT,
+////    M9RGTM,
+////    M9SCMO,
+////    M9SOCO,
+////    M9SPFA,
+////    M9TRHC,
+////    M9TXID,
+////
+////    M9VAMT,
+////    M9WCLN,
+////    M9WSCA
+//FROM F0079D7R.MVXCDTA01.MITFAC;
+//
+//Store MITFAC into   $(qvd_path)_MITFAC.qvd ;
+///$tab livre non factures
+//
+//LIVRES_NON_FACT:
+//select 
+//	uadivi as "STE",
+//	UBITNO as "REF",
+//	MMHIE1 as "TECHNO",
+//	UACUNO as "CLIENT PAYEUR", 
+//	OKCUNM,
+//	UADLIX as "BL",
+//	UBRGDT, 
+//	UAIVDT as "DATE FACTURE",
+//	UBWHLO as "DEPOT" ,
+//	UBFACI as "ETABLISSEMENT",
+//	UAORST as "STATUS",
+//	(UBDLQT+ubivqt) as "QT LIVRE" ,
+//	UBNEPR as "PRIX",
+//  	UBNEPR*(UBDLQT+ubivqt) as "MONTANT" ,
+//	UACUCD as "CURRENCY" ,
+//	//M9ITNO as "CD",//prix de revient de la piece 'PR' // ERREUR Nommage champ
+//	
+//
+//	UBSAPR as "Prix Vente",
+//	uadldt,
+//	uaacdt,
+//	uaivno,
+////ACREFI,
+//	UAORTP 
+//FROM mvxcdta01.ODHEAD h,  mvxcdta01.MITMAS m, mvxcdta01.OCUSMA o, mvxcdta01.ODLINE l 
+////LEFT JOIN projeis.acrefi A ON A.ACREFI = l.UBITNO AND A.ACDIVI = right(l.ubdivi,2)
+//LEFT JOIN  mvxcdta01.MITFAC ON M9ITNO = l.UBITNO AND M9CONO  = l.ubcono and M9FACI  = l.ubfaci
+//where 
+////UBRGDT > '20140901' and
+// l.UBORNO = h.UAORNO
+//and l.UBDLIX= h.UADLIX
+//AND l.UBWHLO = h.UAWHLO
+//and l.UBIVNO = h.UAIVNO
+//and l.UBFACI = h.UAFACI
+//AND M.MMITNO = l.UBITNO
+//AND o.OKCUNO = h.UACUNO
+////and UBDIVI ='001'
+//and UAORST >= '60'
+//and UBPRCH = '0'
+//and UAORTP not in ('PRF','2PR','3PR')
+////and UADIVI ='001' 
+//
+//order by UAPYNO, UBITNO
+//;
+//
+//Store LIVRES_NON_FACT into  $(qvd_path)_LIVRESNONFACTURE.qvd ;
+///$tab PR
+//PR:
+//SQL 
+//SELECT
+//    KOITNO,
+//    KOPCTP,
+//    KOFACI,
+//    KOPCDT,
+//    KOCSU1,
+//    KOCONO,
+//    KOSTRT
+////	KOASU1,
+////    KOASU2,
+////    KOASU3,
+////    KOASU4,
+////    KOASU5,
+////    KOASU6,
+////    KOASU7,
+////    KOASU8,
+////    KOASU9,
+////    KOAVST,
+////    KOBRAS,
+////    KOCFI2,
+////    KOCHID,
+////    KOCHNO,
+////    KOCONO,
+////    KOCOSH,
+////    KOCOSN,
+////    KOCROC,
+////    KOCSU2,
+////    KOCSU3,
+////    KOCSU4,
+////    KOCSU5,
+////    KOCSU6,
+////    KOCSU7,
+////    KOCSU8,
+////    KOCSU9,
+////    KOECVS,
+////    KOEOQT,
+////    KOLEAL,
+////    KOLMDT,
+////    KOMAUM,
+////    KOMAUP,
+////    KONUMA,
+////    KONUOP,
+////    KONUSC,
+////    KOPCDT,
+////    KOPRCM,
+////    KORGDT,
+////    KORGTM,
+////    KORORL,
+////    KORORN,
+////    KOSCOM,
+////    KOSMFN,
+////    KOSSU1,
+////    KOSSU2,
+////    KOSSU3,
+////    KOSTRD,
+////    KOSTRT,
+////    KOTXID,
+////    KOVASE,
+////    KOYEQT
+//FROM F0079D7R.MVXCDTA01.MCHEAD
+//where KOPCTP = '5' and KOCONO like '200%' ;
+//
+//store PR into $(qvd_path)_PR.qvd ;
+///$tab MIBAL
+////table pour récupérer la demande annuelle sur les produits
+//MITBAL:
+//SQL SELECT 
+//	    MBYEQT,
+//	    MBITNO,
+//	    MBDIVI,
+//	    MBFACI,
+//	    MBWHLO
+//	    //MBODDT as MITBAL_ODDT
+////  	MBABCD,
+////    MBABCM,
+////    MBABFC,
+////    MBABFM,
+////    MBACOC,
+////    MBACOM,
+////    MBALMT,
+////    MBALQC,
+////    MBALQT,
+////    MBALS1,
+////    MBAVAL,
+////    MBAVST,
+////    MBBCOS,
+////    MBBUYE,
+////    MBCDYN,
+////    MBCHID,
+////    MBCHNO,
+////    MBCOMG,
+////    MBCONC,
+////    MBCONO,
+////    MBCPCD,
+////    MBDCSS,
+////    MBDDEX,
+////    MBDDLO,
+////    MBDIGR,
+////    MBDILE,
+////
+////    MBDMFN,
+////    MBDPID,
+////    MBDPLO,
+////    MBDTID,
+////    MBEOQM,
+////    MBEOQT,
+////    MBEQDA,
+////
+////    MBFCCM,
+////    MBGRTS,
+////    MBIDDT,
+////    MBINCD,
+////    MBINDT,
+////    MBINSC,
+////    MBINSL,
+////
+////    MBLEA1,
+////    MBLEA2,
+////    MBLEA3,
+////    MBLEAQ,
+////    MBLEAT,
+////    MBLEVD,
+////    MBLEVL,
+////    MBLMDT,
+////    MBLOQT,
+////    MBLRYE,
+////    MBLYQT,
+////    MBMABC,
+////    MBMNUN,
+////    MBMOQT,
+////    MBMPCD,
+////    MBMPCT,
+////    MBMRQT,
+////    MBMSCH,
+////    MBMSSQ,
+////    MBMXPC,
+////    MBMXSM,
+////    MBMXST,
+////    MBNCCA,
+////    MBNUIN,
+////    MBNUS7,
+////    MBODDT,
+////    MBOPLC,
+////    MBOPOM,
+////    MBORQT,
+////    MBORTY,
+////    MBPAFL,
+////    MBPFTM,
+////    MBPISE,
+////    MBPLCD,
+////    MBPLHZ,
+////    MBPLIC,
+////    MBPLQT,
+////    MBPOOT,
+////    MBPPMC,
+////    MBPRCD,
+////    MBPRDC,
+////    MBPRIF,
+////    MBPUIT,
+////    MBQUQT,
+////    MBREDY,
+////    MBREOP,
+////    MBREQP,
+////    MBREQT,
+////    MBRESP,
+////    MBRGDT,
+////    MBRGTM,
+////    MBRJQT,
+////    MBRLQT,
+////    MBRPOP,
+////    MBSAEL,
+////    MBSALM,
+////    MBSATD,
+////    MBSCGR,
+////    MBSCHT,
+////    MBSHCC,
+////    MBSLDY,
+////    MBSLTP,
+////    MBSODY,
+////    MBSPLC,
+////    MBSPMT,
+////    MBSSDA,
+////    MBSSMT,
+////    MBSSQT,
+////    MBSTAT,
+////    MBSTMT,
+////    MBSTQT,
+////    MBSTRL,
+////    MBSTTX,
+////    MBSUNO,
+////    MBSUWH,
+////    MBSVEI,
+////    MBTOMU,
+////    MBTXID,
+////    MBUNMU,
+////    MBUSYE,
+////    MBVTCP,
+////    MBVTCS,
+////
+////    MBWHLT,
+////    MBWHSL,
+////    MBWHSY,
+////    MBWHTY,
+////    MBYEQM,
+////
+////    MBZCAC
+//FROM F0079D7R.MVXCDTA01.MITBAL 
+//WHERE MBCONO=200
+//;
+//
+//store MITBAL into $(qvd_path)_MITBAL.qvd ;
+//;
+//
+///$tab Exit switch
+//End Switch
+//
+//drop tables MITBAL, PR,LIVRES_NON_FACT,MITFAC,MITMAS,STOCK;
+///$tab M3
+
+
+
+SWITCH 'PROD'
+
+Trace M3 PROD;
+case 'PROD'
+LET qvd_path_M3 = '../../DataStore/Extract/M3/Prod/Stock/' & $(today);
+LET vFolderM3 = '../../DataStore/Extract/M3/Prod/Stock/';
+ODBC CONNECT32 TO [M3 PROD] (XUserId is eWIdVBdJHSTeUJdU, XPassword is KFaHFIJKCaUKDbELaKNIVBD);
+LET vBibliotheque= 'M3FDBPRD';
+
+
+case 'PPR'
+Trace M3 PPR;
+LET qvd_path_M3 = '../../DataStore/Extract/M3/PPR/Stock/' & $(today);
+ODBC CONNECT32 TO M3_PPR (XUserId is CDFHSSFNTTWA, XPassword is YMGLYSFNTbdB);
+LET vBibliotheque= 'M3FDBPPR';
+
+
+ENDSWITCH
+
+SET vDIVI = 3;
+SET vFACI_M3 = '030','039';
+SET vWHLO_M3 = '305','310','390';
+
+SET vNomSociete = EFC;
+
+trace  $(vNomSociete);
+trace  $(vDIVI);
+trace  $(vFACI_M3);
+
+///$tab M3_MITLOC
+
+trace  $(vBibliotheque).MITLOC ;
+
+STOCK :
+load *
+where Wildmatch(FACI,$(vFACI_M3))  // Condition pour remonter que EFC
+;
+SQL SELECT
+    MLCONO "DIVI", //DIVISION
+    MLFACI "FACI", //Etablissement
+    MLIDDT "IDDT", //Date de derniere entrée
+    MLITNO "ITNO", //Code Articl
+    MLODDT "ODDT", //Date derniere sortie
+    MLSTAS "STAS", //Status - identité de stock
+    MLSTQT "NSTQ", //Stock  approuvé
+    MLWHLO "DEPOT" ,//Depot 
+    MLBANO,
+    MLCAMU,     
+    MLRGTM,
+    MLWHSL // Emplacement
+ // MLALOC,rrrrrrrrrrr
+ //   MLALQT,//??
+ //   MLATNR,
+ //   MLAUDD,
+ //   MLAUDE,
+
+ //   MLBRE2,Référence de lot 2
+ //   MLBREF,Référence de lot 1
+ //   MLBREM,//remarques
+
+ //   MLCHID,
+ //   MLCHNO,
+ //   MLCNDT, //date de suivi
+
+//    MLDTID, //Identité donnée
+//
+//
+//    MLINDT, //Date de dernier inventaire
+//    MLINON, 
+//
+//    MLLMDT, //Date changement
+//
+//    MLPACT, 
+//    MLPLQT, //Qté liste de prelevement Unm Base
+//    MLPOCY, 
+//    MLPPRI, Priorité de prlevement.
+//    MLPRDT, 
+//    MLPUAB,
+//    MLRCLN,
+//    MLRCLS,
+//    MLREPN,//N° de recpetion
+//    MLRGDT,//Date de saisie
+//
+//    MLSEDT, //Date de vente
+//    MLSLTP, //Zone de stockage
+//
+//    MLSTES,
+//    MLSTQM, //Stock disponible Unm Principale
+//
+//    MLTXID, //ID_TExte
+//
+//    MLWHLT,
+//    MLWHSL
+FROM $(vBibliotheque).MITLOC
+//where MLWHLO < 899 and MLWHLO not in(10,20)
+where MLCONO = 200
+AND  trim(MLFACI) in ($(vFACI_M3))// Condition pour remonter que EFC
+;
+
+trace $(qvd_path_M3)_$(vNomSociete)_STOCK.qvd;
+Store STOCK into  $(qvd_path_M3)_$(vNomSociete)_STOCK.qvd ;
+
+
+
+///$tab M3_MITMAS
+
+trace  $(vBibliotheque).MITMAS;
+
+MITMAS:
+SQL SELECT *
+//    MMSTAT, //statut artcile
+//    MMITCL, // Article Techno M3
+//   // MMHIE1, //TEchno produit V12
+//    MMITDS, // Article Description
+//    MMUNMS, // Article Unité de Mesure
+//    MMRESP, // Article Groupe Produit
+//    //    MMRESP,
+//    MMITNO, // Article Code
+//    MMITGR	// Groupe article
+//	MMAAD0,
+//    MMAAD1,
+//    MMACHK,
+//    MMACRF,
+//    MMACTI,
+//    MMAEQY,
+//    MMAES2,
+//    MMAESC,
+//    MMALUC,
+//    MMALUN,
+//    MMAMOR,
+//    MMAMPT,
+//    MMARPA,
+//    MMARPR,
+//    MMARR1,
+//    MMATMN,
+//    MMATMO,
+//    MMAUTC,
+//    MMAWDY,
+//    MMBACD,
+//    MMBGRP,
+//    MMBOGR,
+//    MMBPEY,
+//    MMBUAR,
+//    MMBYPR,
+//    MMCCO1,
+//    MMCCO2,
+//    MMCCO3,
+//    MMCETY,
+//    MMCFI1,
+//    MMCFI2,
+//    MMCFI3,
+//    MMCFI4,
+//    MMCFI5,
+//    MMCHCD,
+//    MMCHCL,
+//    MMCHID,
+//    MMCHNO,
+//    MMCONC,
+//    MMCONO,
+//    MMCUCD,
+//    MMCUCS,
+//    MMDCCD,
+//    MMDIGI,
+//    MMDIM1,
+//    MMDIM2,
+//    MMDIM3,
+//    MMDIRR,
+//    MMDOID,
+//    MMDPID,
+//    MMDTID,
+//    MMDWNO,
+//    MMECAC,
+//    MMECCC,
+//    MMECFL,
+//    MMECMA,
+//    MMECVE,
+//    MMEPCD,
+//    MMETRF,
+//    MMEVGR,
+//    MMEXPD,
+//    MMFCCM,
+//    MMFCU1,
+//    MMFEBA,
+//    MMFRAG,
+//    MMFRE3,
+//    MMFRE4,
+//    MMFUDS,
+//    MMFUNC,
+//    MMGRMT,
+//    MMGRP1,
+//    MMGRP2,
+//    MMGRP3,
+//    MMGRP4,
+//    MMGRP5,
+//    MMGRTI,
+//    MMGRTS,
+//    MMGRWE,
+//    MMHAC1,
+//    MMHAC2,
+//    MMHAC3,
+//    MMHAZI,
+//    MMHDPR,
+     
+//    MMHIE2,
+//    MMHIE3,
+//    MMHIE4,
+//    MMHIE5,
+//    MMIACP,
+//    MMIEAA,
+//    MMINDI,
+     
+
+//    MMITGR,
+     
+//    MMITRC,
+//    MMITRF,
+//    MMITTY,
+//    MMLAMA,
+//    MMLEAI,
+//    MMLMDT,
+//    MMMABU,
+//    MMMAPL,
+//    MMMAPN,
+//    MMMBFR,
+//    MMMBSR,
+//    MMMBUR,
+//    MMMDIR,
+//    MMMES1,
+//    MMMES2,
+//    MMMES3,
+//    MMMES4,
+//    MMMPGM,
+//    MMMVA1,
+//    MMMVA2,
+//    MMMVA3,
+//    MMMVA4,
+//    MMNESA,
+//    MMNEWE,
+//    MMNPTO,
+//    MMNSUF,
+//    MMORTY,
+//    MMOTDI,
+//    MMPDCC,
+//    MMPEQ1,
+//    MMPEQ2,
+//    MMPEQ3,
+//    MMPEQ4,
+//    MMPET1,
+//    MMPET2,
+//    MMPET3,
+//    MMPET4,
+//    MMPLCD,
+//    MMPLMZ,
+//    MMPOCY,
+//    MMPPDT,
+//    MMPPUN,
+//    MMPRCM,
+//    MMPRGP,
+//    MMPRGR,
+//    MMPROD,
+//    MMPRVG,
+//    MMPUCD,
+//    MMPUPR,
+//    MMPUUN,
+//    MMQACD,
+
+//    MMRGDT,
+//    MMRGTM,
+//    MMRIDC,
+//    MMRIDE,
+//    MMSACD,
+//    MMSALE,
+//    MMSAPR,
+//    MMSCGR,
+//    MMSEPR,
+//    MMSMFI,
+//    MMSPAC,
+//    MMSPDT,
+//    MMSPE1,
+//    MMSPE2,
+//    MMSPE3,
+//    MMSPE4,
+//    MMSPE5,
+//    MMSPUC,
+//    MMSPUN,
+      
+//    MMSTCD,
+//    MMSTCN,
+//    MMSTCS,
+//    MMSTNC,
+//    MMSTUN,
+//    MMSUNO,
+//    MMTANK,
+//    MMTAXC,
+//    MMTBFR,
+//    MMTBSR,
+//    MMTBUR,
+//    MMTOHI,
+//    MMTORE,
+//    MMTPCD,
+//    MMTPLI,
+//    MMTRPA,
+//    MMTXID,
+
+//    MMUNNN,
+//    MMUNPA,
+//    MMVOL3,
+//    MMVTCP,
+//    MMVTCS,
+//    MMWADY,
+//    MMWAL1,
+//    MMWAL2,
+//    MMWAL3,
+//    MMWAL4,
+//    MMWAPC,
+//    MMWSCA
+FROM $(vBibliotheque).MITMAS;
+
+trace $(qvd_path_M3)_MITMAS.qvd;
+Store MITMAS into   $(qvd_path_M3)_MITMAS.qvd;
+///$tab M3_MITBAL
+trace  $(vBibliotheque).MITBAL;
+
+//table pour récupérer la demande annuelle sur les produits
+MITBAL:
+load * 
+where num(MBDIVI) = $(vDIVI)
+;
+SQL SELECT *
+//	    MBYEQT,
+//	    MBITNO,
+//	    MBDIVI,
+//	    MBFACI,
+//	    MBWHLO
+	   // ,MBSTAT // à ajouter -> statut article depot : à intégrer dans le tableau
+//	    MBODDT as MITBAL_ODDT
+//  	MBABCD,
+//    MBABCM,
+//    MBABFC,
+//    MBABFM,
+//    MBACOC,
+//    MBACOM,
+//    MBALMT,
+//    MBALQC,
+//    MBALQT,
+//    MBALS1,
+//    MBAVAL,
+//    MBAVST,
+//    MBBCOS,
+//    MBBUYE,
+//    MBCDYN,
+//    MBCHID,
+//    MBCHNO,
+//    MBCOMG,
+//    MBCONC,
+//    MBCONO,
+//    MBCPCD,
+//    MBDCSS,
+//    MBDDEX,
+//    MBDDLO,
+//    MBDIGR,
+//    MBDILE,
+//
+//    MBDMFN,
+//    MBDPID,
+//    MBDPLO,
+//    MBDTID,
+//    MBEOQM,
+//    MBEOQT,
+//    MBEQDA,
+//
+//    MBFCCM,
+//    MBGRTS,
+//    MBIDDT,
+//    MBINCD,
+//    MBINDT,
+//    MBINSC,
+//    MBINSL,
+//
+//    MBLEA1,
+//    MBLEA2,
+//    MBLEA3,
+//    MBLEAQ,
+//    MBLEAT,
+//    MBLEVD,
+//    MBLEVL,
+//    MBLMDT,
+//    MBLOQT,
+//    MBLRYE,
+//    MBLYQT,
+//    MBMABC,
+//    MBMNUN,
+//    MBMOQT,
+//    MBMPCD,
+//    MBMPCT,
+//    MBMRQT,
+//    MBMSCH,
+//    MBMSSQ,
+//    MBMXPC,
+//    MBMXSM,
+//    MBMXST,
+//    MBNCCA,
+//    MBNUIN,
+//    MBNUS7,
+//    MBODDT,
+//    MBOPLC,
+//    MBOPOM,
+//    MBORQT,
+//    MBORTY,
+//    MBPAFL,
+//    MBPFTM,
+//    MBPISE,
+//    MBPLCD,
+//    MBPLHZ,
+//    MBPLIC,
+//    MBPLQT,
+//    MBPOOT,
+//    MBPPMC,
+//    MBPRCD,
+//    MBPRDC,
+//    MBPRIF,
+//    MBPUIT,
+//    MBQUQT,
+//    MBREDY,
+//    MBREOP,
+//    MBREQP,
+//    MBREQT,
+//    MBRESP,
+//    MBRGDT,
+//    MBRGTM,
+//    MBRJQT,
+//    MBRLQT,
+//    MBRPOP,
+//    MBSAEL,
+//    MBSALM,
+//    MBSATD,
+//    MBSCGR,
+//    MBSCHT,
+//    MBSHCC,
+//    MBSLDY,
+//    MBSLTP,
+//    MBSODY,
+//    MBSPLC,
+//    MBSPMT,
+//    MBSSDA,
+//    MBSSMT,
+//    MBSSQT,
+//    MBSTAT,
+//    MBSTMT,
+//    MBSTQT,
+//    MBSTRL,
+//    MBSTTX,
+//    MBSUNO,
+//    MBSUWH,
+//    MBSVEI,
+//    MBTOMU,
+//    MBTXID,
+//    MBUNMU,
+//    MBUSYE,
+//    MBVTCP,
+//    MBVTCS,
+//
+//    MBWHLT,
+//    MBWHSL,
+//    MBWHSY,
+//    MBWHTY,
+//    MBYEQM,
+//
+//    MBZCAC
+FROM $(vBibliotheque).MITBAL 
+WHERE MBCONO=200
+and cast(MBDIVI as integer) = $(vDIVI) // Condition pour remonter que la société concernée
+;
+
+trace $(qvd_path_M3)_$(vNomSociete)_MITBAL.qvd ;
+store MITBAL into $(qvd_path_M3)_$(vNomSociete)_MITBAL.qvd ;
+;
+
+///$tab M3_MITFAC
+
+trace  $(vBibliotheque).MITFAC;
+MITFAC : 
+load *
+where Wildmatch(M9FACI,$(vFACI_M3))
+ ;
+SQL SELECT *
+//    M9ITNO,
+//    M9FACI,
+//    M9CONO,
+//    M9ACRF, //objet controle comptable
+//    M9APPR //prix de revient
+    
+//	M9UCOS // Cout Standard	//
+//    M9APPR,
+//    M9AUGE,
+//    M9BQTM,
+//    M9BQTY,
+//    M9CHID,
+//    M9CHNO,
+//    M9COCD,
+//
+//    M9CPDC,
+//    M9CPL0,
+//    M9CPL1,
+//    M9CPL2,
+//    M9CPRE,
+//    M9CPRI,
+//    M9CSNO,
+//    M9DIDF,
+//    M9DIDY,
+//    M9DLEF,
+//    M9DLET,
+//    M9DTID,
+//    M9ECAR,
+//    M9ECCC,
+//    M9EDEC,
+//    M9EVGR,
+//    M9EXPC,
+//
+//    M9FANO,
+//    M9FANQ,
+//    M9FANR,
+//    M9FATM,
+//    M9GRTI,
+//
+//    M9JITF,
+//    M9LAMA,
+//    M9LEA4,
+//    M9LLCM,
+//    M9LMDT,
+//    M9MARC,
+//    M9MOLL,
+//    M9OPFQ,
+//    M9ORCO,
+//    M9PLAP,
+//    M9PLUP,
+//    M9PPL0,
+//    M9PPL1,
+//    M9PPL2,
+//    M9PRCM,
+//    M9PRRA,
+//    M9REWH,
+//    M9RGDT,
+//    M9RGTM,
+//    M9SCMO,
+//    M9SOCO,
+//    M9SPFA,
+//    M9TRHC,
+//    M9TXID,
+//
+//    M9VAMT,
+//    M9WCLN,
+//    M9WSCA
+FROM $(vBibliotheque).MITFAC
+
+;
+
+trace $(qvd_path_M3)_$(vNomSociete)_MITFAC.qvd ;
+Store MITFAC into   $(qvd_path_M3)_$(vNomSociete)_MITFAC.qvd ;
+///$tab M3_LNF
+trace  $(vBibliotheque) LNF;
+LIVRES_NON_FACT:
+load *
+where num(STE) = $(vDIVI) // Filtre EFC
+;
+select 
+	uadivi as "STE",
+	UBITNO as "REF",
+	MMHIE1 as "TECHNO",
+	UACUNO as "CLIENT PAYEUR", 
+	OKCUNM,
+	UADLIX as "BL",
+	UBRGDT, 
+	UAIVDT as "DATE FACTURE",
+	UBWHLO as "DEPOT" ,
+	UBFACI as "ETABLISSEMENT",
+	UAORST as "STATUS",
+	(UBDLQT+ubivqt) as "QT LIVRE" ,
+	UBNEPR as "PRIX",
+  	UBNEPR*(UBDLQT+ubivqt) as "MONTANT" ,
+	UACUCD as "CURRENCY" ,
+	//M9ITNO as "CD",//prix de revient de la piece 'PR' // ERREUR Nommage champ
+	
+
+	UBSAPR as "Prix Vente",
+	uadldt,
+	uaacdt,
+	uaivno,
+//ACREFI,
+	UAORTP 
+FROM $(vBibliotheque).ODHEAD h,  $(vBibliotheque).MITMAS m, $(vBibliotheque).OCUSMA o, $(vBibliotheque).ODLINE l 
+//LEFT JOIN projeis.acrefi A ON A.ACREFI = l.UBITNO AND A.ACDIVI = right(l.ubdivi,2)
+LEFT JOIN  $(vBibliotheque).MITFAC ON M9ITNO = l.UBITNO AND M9CONO  = l.ubcono and M9FACI  = l.ubfaci
+where 
+//UBRGDT > '20140901' and
+ l.UBORNO = h.UAORNO
+and l.UBDLIX= h.UADLIX
+AND l.UBWHLO = h.UAWHLO
+and l.UBIVNO = h.UAIVNO
+and l.UBFACI = h.UAFACI
+AND M.MMITNO = l.UBITNO
+AND o.OKCUNO = h.UACUNO
+
+and cast(UBDIVI as integer) = $(vDIVI) //////// ramener que la société concernée
+
+and UAORST >= '60'
+and UBPRCH = '0'
+and UAORTP not in ('PRF','2PR','3PR')
+
+
+order by UAPYNO, UBITNO
+;
+
+Trace  $(qvd_path_M3)_$(vNomSociete)_LIVRESNONFACTURE.qvd ;
+Store LIVRES_NON_FACT into  $(qvd_path_M3)_$(vNomSociete)_LIVRESNONFACTURE.qvd ;
+///$tab M3_PR
+trace  $(vBibliotheque) PR;
+
+PR:
+load *
+where  num(trim(KOPCTP)) = 3 
+and  WildMatch(KOFACI,$(vFACI_M3))
+and num(KOCONO) =200;
+SQL 
+SELECT
+    KOITNO,
+    KOPCTP,
+    KOFACI,
+    KOPCDT,
+    KOCSU1,
+    KOCONO,
+    KOSTRT
+//	KOASU1,
+//    KOASU2,
+//    KOASU3,
+//    KOASU4,
+//    KOASU5,
+//    KOASU6,
+//    KOASU7,
+//    KOASU8,
+//    KOASU9,
+//    KOAVST,
+//    KOBRAS,
+//    KOCFI2,
+//    KOCHID,
+//    KOCHNO,
+//    KOCONO,
+//    KOCOSH,
+//    KOCOSN,
+//    KOCROC,
+//    KOCSU2,
+//    KOCSU3,
+//    KOCSU4,
+//    KOCSU5,
+//    KOCSU6,
+//    KOCSU7,
+//    KOCSU8,
+//    KOCSU9,
+//    KOECVS,
+//    KOEOQT,
+//    KOLEAL,
+//    KOLMDT,
+//    KOMAUM,
+//    KOMAUP,
+//    KONUMA,
+//    KONUOP,
+//    KONUSC,
+//    KOPCDT,
+//    KOPRCM,
+//    KORGDT,
+//    KORGTM,
+//    KORORL,
+//    KORORN,
+//    KOSCOM,
+//    KOSMFN,
+//    KOSSU1,
+//    KOSSU2,
+//    KOSSU3,
+//    KOSTRD,
+//    KOSTRT,
+//    KOTXID,
+//    KOVASE,
+//    KOYEQT
+FROM $(vBibliotheque).MCHEAD
+//where num(trim(KOPCTP)) = '5' and KOCONO like '200%' 
+where  KOFACI in ($(vFACI_M3))
+;
+
+store PR into $(qvd_path_M3)_$(vNomSociete)_PR.qvd ;
+///$tab M3_END
+//for each fileM3 in FileList('$(vFolderM3)*MITBAL.qvd')
+//			
+//		MITBAL_tmp1_M3:
+//		
+//		LOAD
+//			 //MBYEQT, // Demande Annuelle
+//			 num(MBYEQT,'# ##0,000') as MBYEQT, // consommation annuelle 
+//			 MBITNO, 
+//			 MBDIVI, 
+//			 MBFACI,
+//			// MBFACI as F_Etablissement,
+//			 ApplyMap('MAP_CD_SOCIETE_SOCIETE',MBDIVI) 							as SOCIETE,
+//			 MBWHLO,
+//			
+//			 makedate(right(left(FileName(),8),4), mid(left(FileName(),8),3,2), left(left(FileName(),8),2) ) as DATE_MITBAL
+//	     FROM $(fileM3)(qvd)
+//	     where num(MBDIVI) = 3
+//	     
+//	     ;
+//
+//next fileM3
+//
+//NoConcatenate
+//
+//MITBAL_M3:
+//LOAD *,
+////			MBITNO &'|'& DATE_MITBAL 		as %KEY_FACT_MITBAL // clé vers le stock pour les demandes annuelles
+//			MBFACI &'|'& MBWHLO &'|'& MBITNO &'|'& DATE_MITBAL&'|'&'M3' 		as %KEY_FACT_MITBAL // clé vers le stock pour les demandes annuelles
+//			//,num(MBDIVI,000)&MBFACI&MBWHLO 		as %KEY_REFERENTIEL
+//			,MBDIVI&MBFACI&MBWHLO&MBITNO 		as %KEY_REFERENTIEL_2
+//resident MITBAL_tmp1_M3;

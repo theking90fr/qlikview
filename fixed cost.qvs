@@ -1,0 +1,1195 @@
+﻿///$tab Main
+
+
+SECTION Access;
+//LOAD * Inline [
+//	ACCESS,	USERID,	PASSWORD,	NTNAME,				NTDOMAINSID
+//	ADMIN, 	admin,	admin,		*,	 				*, 											
+//	ADMIN, 	*,		*,			alrubi, 			S-1-5-21-2269730680-2616703495-4085391423
+//	ADMIN, 	*,		*,			sondenheimer,		S-1-5-21-2269730680-2616703495-4085391423
+//	USER, 	*,		*,			essodaigui,			S-1-5-21-2269730680-2616703495-4085391423
+//];
+
+LOAD 
+     ACCESS, 
+     USERID, 
+     PASSWORD, 
+     NTNAME, 
+     NTDOMAINSID, 
+     GROUPE
+FROM
+[..\..\..\..\60-Security\SECTION ACCESS - Liste Utilisateurs.xlsx]
+(ooxml, embedded labels, table is USERS)
+where trim(APPLICATION) = 'FINANCE';
+
+SECTION Application;
+
+STAR is * ;
+
+LOAD GROUPE, 
+     SOCIETE as DIVISION, 
+     ETABLISSEMENT, 
+     DEPOT
+FROM
+[..\..\..\..\50-Documentation\SECTION ACCESS - Liste Utilisateurs.xlsx]
+(ooxml, embedded labels, table is FILTRES);
+
+SET ThousandSep=' ';
+SET DecimalSep=',';
+SET MoneyThousandSep=' ';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='# ##0,00 €;-# ##0,00 €';
+SET TimeFormat='hh:mm:ss';
+SET DateFormat='DD/MM/YYYY';
+SET TimestampFormat='DD/MM/YYYY hh:mm:ss[.fff]';
+SET MonthNames='janv.;févr.;mars;avr.;mai;juin;juil.;août;sept.;oct.;nov.;déc.';
+SET DayNames='lun.;mar.;mer.;jeu.;ven.;sam.;dim.';
+
+
+// Switch case en cas ou Si l'appli est developpé en local, les variables d'envoraonnements sont configurés pour ma machine, sinon, l'arborescence du servver est utilisé
+
+SWITCH 'server'
+
+case 'local'
+let V12_path_qvd = '..\Dataware\V12\' ;
+let path_XL_File = '..\Dataware\'; 
+let M3_path_qvd = '..\Dataware\M3\' ;
+let path_language_referential =  '..\Dataware\'; 
+
+case 'server'
+
+let V12_path_qvd = '..\..\..\DataStore\Extract\V12\Prod\' ;
+let path_XL_File = '..\..\..\DataStore\Referentials\Finance_frais fixes_OA\'; 
+let M3_path_qvd =  '..\..\..\DataStore\Extract\M3\Prod\' ;
+let path_language_referential =  '..\..\..\DataStore\Referentials\Finance_frais fixes_OA\'; 
+
+ENDSWITCH
+
+//table pour l'usage de l'onglet HOW to?
+FAITS:
+LOAD * INLINE [
+ANNEE_FAIT,	FAIT
+1990,	Libération de Nelson MANDELA
+2008,	B.OBAMA devient président des Etats unis
+1998,	La France gagne la coupe du monde de Football
+1985,	Création des restos du cœur
+2010,	Stephane Guillon est remercié par France Inter
+2011,	Révolution arabe
+2011,	Mariage princier en Angleterre
+1986,	Prince chante 'Kiss'
+
+];
+
+///$tab MPLINE
+
+OA_tmp:
+LOAD 
+	 IBWHLO & IBFACI & IBCONO & IBPUNO as KEY_COMMANDE , 
+	 IBCONO & IBITNO as KEY_ARTICLE,
+	 IBCONO & IBSUNO as KEY_FOURNISSEUR,
+	 IBCONO & IBPROJ as KEY_PROJET,
+	 IBCONO & IBSUNO & IBPUNO & IBPNLI & IBPNLS as KEY_FACTURE,
+	 IBCONO & IBPUNO & IBPNLI & IBPNLS & IBPNLI  as KEY_RECEPTION, 
+	 IBCOCE as KEY_CENTRE_DE_COUT,
+	 IBCOCE ,
+	 IBCONO & IBORTY as KEY_DESC_COMMANDE ,
+	 //Au dessus, liste des clés composées de cette table
+	 IBPNLI as NUM_LIGNE_ACHT,
+	 IBPNLS as SOUS_NUM_LIGNE_ACHT,
+	 IBITNO as CODE_ARTCLE,
+	 IBFACI as ETAB,
+	 IBORTY as TYPE_ORDRE_ACAHT, 
+	 IBPUNO as COMMDE_ACHT,  
+	 IBWHLO as DEPOT,
+	 IBPITT as LIBELLE_ART, 
+	 IBSUNO as NUM_FRNSSR,
+	 IBPUSL as STATUT_BAS,
+	 IBPUST as STATUT_HAUT,	
+	 makedate(left(IBDWDT,4),mid(IBDWDT,5,2),right(IBDWDT,2))  as [Date livraison planifiée],
+	 left(IBDWDT,4) as [ANNEE livraison planifiée],
+	 mid(IBDWDT,5,2) as [MOIS livraison planifiée] ,
+	 left(IBDWDT,4) &'-'& mid(IBDWDT,5,2) as ANNEE_MOIS_Livraison,
+	 IBATDT as [Date dernière activité],
+	 IBLNAM as [Montant commandé], 
+	 IBORQA as [Qtité commandée], 
+	 IBIVQA as [Qté facturé],
+	 IBPROJ as [Projet ligne Commande],
+	 IBELNO as [Elément Projet Ligne Commande] ,
+	 IBRVQA as [Qté Receptionné],
+	 IBSDQA,
+	 IBCOCE as [CENTRE DE COUT],
+	 IBPROJ as SEGMENT_4,
+	 IBELNO as SEGMENT_5,
+	 ''     as SEGMENT_7,
+	 IBPURC as DEMANDEUR ,
+	 IBPUPR as PRIX_UNITAIRE, 
+	 IBPITD as LIBELLE_LIGNE_OA   
+//	 IBACLI, 
+//     IBACRF, 
+//     IBADQA, 
+//     IBAGNB, 
+//     IBATDT, 
+//     IBATNR, 
+//     IBATPR, 
+//     IBBUYE, 
+//     IBCAQA, 
+//     IBCFD1, 
+//     IBCFD2, 
+//     IBCFD3, 
+//     IBCFIN, 
+//     IBCFMB, 
+//     IBCFPB, 
+//     IBCFQA, 
+//     IBCHID, 
+//     IBCHNO, 
+//     IBCLAN, 
+//     IBCLLI, 
+//     IBCLLN,       
+//     IBCODT, 
+//     IBCONO, 
+//     IBCPPR, 
+//     IBCPRI, 
+//     IBCPUC, 
+//     IBCSNO, 
+//     IBDT4T, 
+//     IBDTID, 
+//     IBDWCP, 
+//     IBECDD, 
+//     IBECF1, 
+//     IBECF2, 
+//     IBECF3, 
+//     IBECF4, 
+//     IBECF5, 
+//     IBECLC, 
+//     IBECVE, 
+//     IBECVS,      
+//     IBETRF, 
+//     IBEXAT, 
+//     IBEXAV, 
+//     IBEXEP,     
+//     IBFUSC, 
+//     IBGRMT, 
+//     IBHAFE, 
+//     IBHDPR, 
+//     IBIDAG, 
+//     IBIDAT, 
+//     IBINEP, 
+//     IBIRCV, 
+//     IBLICC, 
+//     IBLMDT, 
+//     IBLPUD, 
+//     IBLTPP, 
+//     IBMSTN, 
+//     IBNOED, 
+//     IBNPDE, 
+//     IBODI1, 
+//     IBODI2, 
+//     IBODI3, 
+//     IBOEND, 
+//     IBOTOD, 
+//     IBOURR, 
+//     IBOURT, 
+//     IBPACT, 
+//     IBPDDT, 
+//     IBPGRN, 
+//     IBPLDT, 
+//     IBPLPN, 
+//     IBPLPS, 
+//     IBPOTC, 
+//     IBPPUN, 
+//     IBPRCS, 
+//     IBPRIP, 
+//     IBPROD,      
+//     IBPTCD, 
+//     IBPUCD, 
+//     IBPUSL, 
+//     IBPUST, 
+//     IBPUUN, 
+//     IBRCDT, 
+//     IBREPP, 
+//     IBRESF, 
+//     IBREVN, 
+//     IBRGDT, 
+//     IBRGTM, 
+//     IBRJQA, 
+//     IBRORC, 
+//     IBRORL, 
+//     IBRORN, 
+//     IBRRQA, 
+ 
+//     IBSDQA, 
+//     IBSEBI, 
+//     IBSEQN, 
+//     IBSITE, 
+//     IBSORN, 
+//     IBSUAG, 
+//     IBSUFI, 
+//     
+//     IBTAXC, 
+//     IBTERE, 
+//     IBTIHM, 
+//     IBTNQA, 
+//     IBTXID, 
+//     IBULEX, 
+//     IBUPAV, 
+//     IBUPIV, 
+//     IBVDDT, 
+//     IBVRCD, 
+//     IBVTCD, 
+     
+FROM
+[$(V12_path_qvd)MPLINE.qvd]
+(qvd)
+WHERE  not wildmatch(IBWHLO,901,902,903)
+AND  IBCONO = 200
+and (IBPUSL < '85' or IBPUST < '85')
+and (IBPUSL > '20' or IBPUST > '20')
+//AND IBFACI in ('EFI','DIS','BEY')
+AND IBDWDT <= 20141231
+;
+
+///$tab MPHEAD
+left join (OA_tmp)
+MPHEAD:
+LOAD 
+	IAWHLO &IAFACI&IACONO&IAPUNO as KEY_COMMANDE, 
+	IACONO & IACUCD & IACUCD &IADIVI     as KEY_DEVISE, 
+	IACONO& IASUNO  as KEY_FOURNISSEUR, 
+	IABUYE 			as ACHETEUR, 
+	makedate(left(IAPUDT,4),mid(IAPUDT,5,2),right(IAPUDT,2))  as DATE_COMMANDE,
+	left(IAPUDT	,4)	as ANNEE_COMMANDE,
+	mid(IAPUDT,5,2) as MOIS_COMMANDE,
+	IACUCD 			as DEVISE ,
+	IAORTY 			as TYPE_COMMANDE,
+	if(IADIVI = '001', 'EFI' ,
+		if(IADIVI = '005', 'EUFI' ,
+			if(IADIVI = '003', 'EFC' , 'EFEC'
+				
+			)
+		)
+	)			    as DIVISION, 
+	IAPUSL  		as Statut_bas, 
+    IAPUST			as Statut_Haut,
+    IAWHLO 			as MPH_DEPOT
+
+//	IAAGNT, 
+//     IAAGRA, 
+//     IAATDT, 
+//     IAAURE, 
+//     IABRAM, 
+//   
+//     IACHID, 
+//     IACHNO, 
+//     IACMCO, 
+//     IACOAM, 
+//     IACONO, 
+//     IACPRI, 
+//     IACUCD, 
+//     IACUTE, 
+//     IADTID, 
+//     IADUDT, 
+//     IADWDT, 
+//     IAECLC, 
+//     IAELNO, 
+//     IAEXAT, 
+//     IAEXAV, 
+//     IAEXEP, 
+//     IAFACI, 
+//     IAFIDS, 
+//     IAFUSC, 
+//     IAGRWE, 
+//     IAHAFE, 
+//     IAHDDT, 
+//     IAINEP, 
+//     IALEDT, 
+//     IALIDT, 
+//     IALMDT, 
+//     IALNCD, 
+//     IALRED, 
+//     IAMEDC, 
+//     IAMODL, 
+//     IAMTDP, 
+//     IAMTWP, 
+//     IANOLN, 
+//     IANOPP, 
+//     IANTAM, 
+//     IAODAM, 
+//     IAORTY, 
+//     IAOTBA, 
+//     IAOTPC, 
+//     IAOURR, 
+//     IAOURT, 
+//     IAPOPO, 
+//     IAPOTC, 
+//     IAPOTX, 
+//     IAPRLA, 
+//     IAPROJ, 
+//     IAPRSU, 
+//     IAPRTX, 
+//     IAPTAC, 
+//     
+//     IAPUNO,
+//     IAPURC, 
+//    , 
+//     IAPYAD, 
+//     IAPYME, 
+//     IARCDT, 
+//     IARFID, 
+//     IARGDT, 
+//     IARGTM, 
+//     IARTAC, 
+//     IASCDT, 
+//     IASHVI, 
+//     IASLDT, 
+//     IASUNO, 
+//     IATEAF, 
+//     IATEDL, 
+//     IATEL1, 
+//     IATEOR, 
+//     IATEPA, 
+//     IATEPY, 
+//     IATFNO, 
+//     IATIHM, 
+//     IATLEX, 
+//     IATLIN, 
+//     IATOQT, 
+//     IATXID, 
+//     IAVOL3, 
+//     IAWHLO, 
+//     IAYRE1
+FROM
+[$(V12_path_qvd)MPHEAD.qvd]
+(qvd)
+WHERE  not wildmatch(IAWHLO,901,902,903)
+AND
+IACONO = 200
+;
+
+///$tab MITMAS
+
+left join (OA_tmp)
+MITMAS_tmp: //table des articles
+LOAD MMCONO & MMITNO as KEY_ARTICLE,
+	 MMACRF as [Objet contrôle comptable Article], 
+	 MMACRF as KEY_MMCRAF,//clé vers CONVCAPCCA
+	 MMITGR as GROUPE_ARTICLE,
+	 MMITTY as [TYPE ARTICLE],// TYPE ARTICLE  
+     MMHIE1 as [TECHNO ART],
+     MMITNO,
+     MMACRF,
+     MMCFI1, //Centre de cout pour les sociétés US et Turque
+     //CTTX15,
+     MMPUUN as UNITE_DE_GESTION
+//     MMCHNO, 
+//     MMFUDS, 
+//     MMITDS, 
+//     MMSUNO,
+
+//     MMCONO,
+FROM
+[$(V12_path_qvd)MITMAS.qvd]
+(qvd)
+WHERE MMCONO = 200
+;
+left join 
+CONVCAPCCA:
+LOAD trim(AIT1) as AIT1, 
+     trim(AIT2) as AIT2, 
+     CTTX40, 
+     MMACRF as KEY_MMCRAF //clé vers MITMAS
+FROM
+[$(V12_path_qvd)CONVCAPCCA.qvd]
+(qvd);
+left join
+LOAD  
+     CTSTKY as MMCFI1, 
+     CTTX15
+FROM
+[$(V12_path_qvd)CSYTAB.QVD]
+(qvd);
+
+
+///$tab PROJET
+Left Join(OA_tmp)
+PROJET:
+LOAD 
+	LACONO & LAPROJ as KEY_PROJET,
+	LAFRE1 as [TECHNO PROJET] 
+
+FROM
+[$(V12_path_qvd)BPROJS.qvd]
+(qvd);
+
+///$tab FCHACC
+Left Join(OA_tmp)
+//referentiel centre de cout
+FCHACC:
+LOAD //EADIVI, 
+     EATX15 as LIB_CENTRE_DE_COUT,//libelle centre de cout 
+    // EAAITP, 
+     EAAITM as KEY_CENTRE_DE_COUT
+FROM
+[$(V12_path_qvd)FCHACC.qvd] (qvd)
+WHERE EAAITP=2
+AND EADIVI='   '
+;
+
+///$tab MPORDT
+left join (OA_tmp)
+MPORDT:
+LOAD OTCONO & OTORTY as KEY_DESC_COMMANDE,
+	OTTX15 as DESCRIPTION_COMMANDE
+FROM
+[$(V12_path_qvd)MPORDT.qvd]
+(qvd);
+
+///$tab MPH,MPL,MITMAS,projet
+OA :
+LOAD *,
+if([Date livraison planifiée]<DATE_COMMANDE, 'X') as flag_livraison_inf_commande,
+if (len(AIT1)>0 ,AIT1, MMACRF ) as SEGMENT_1,
+IBCOCE & ' - ' & LIB_CENTRE_DE_COUT as CODE_LIB_CENTRE_COUT,
+if (len(AIT2)>0 ,AIT2,[CENTRE DE COUT] ) as SEGMENT_2,
+if (trim([TECHNO PROJET])<>'', [TECHNO PROJET]  , if([TECHNO ART]<>'888888',[TECHNO ART] )  ) as SEGMENT_3,
+if (STATUT_BAS=75 and STATUT_HAUT=75, 'RECEPTIONNE NON FACTURE') as Flag_RECEPTIONNE_NON_FACTURE,
+if (STATUT_BAS<=35 and STATUT_HAUT<=35, 'NON RECEPTIONNE NON FACTURE') as Flag_NON_RECEPTIONNE_NON_FACTURE,
+if(wildmatch(TYPE_COMMANDE,'SAG','MT1','MAI'),'Hors Production', 'Production' ) as  Type_Commde_bis,
+if([Qtité commandée]=[Qté facturé] and [Qté Receptionné]=[Qté facturé] ,'Qté Cdé=Recpt.=Fact.') as [Flag C=R=F] , 
+if([Qté facturé]>[Qté Receptionné], 'Qté Facturé > Qté Recept.') as Flag_facturé_sup_recep,
+STATUT_BAS & ' / ' & STATUT_HAUT as STATUT_LIGNE,
+Statut_bas & ' / ' & Statut_Haut as STATUT_ENTETE
+Resident OA_tmp;
+
+DROP TABLE OA_tmp;
+
+
+
+// IBPUSL as STATUT_BAS,
+//	 IBPUST as STATUT_HAUT,
+///$tab Fournisseur
+FOURNISSEUR:
+LOAD IIACRF as [Object Controle Comptable Fournisseur], 
+     IICFI1 as SEGMENT_6, 
+     IISUNO,
+     IICONO&IISUNO as KEY_FOURNISSEUR,
+     IICONO
+FROM
+[$(V12_path_qvd)CIDVEN.qvd](qvd)
+where IICONO=200
+;
+join
+CIDMAS:
+LOAD IDSUNM as [Nom Fournisseur],
+	 IDSUNO, 
+	 IDCSCD as [Pays Fournisseur],
+     IDCONO&IDSUNO as KEY_FOURNISSEUR , 
+     IDCFI1 as [Interco Fournisseur],
+     IDCONO, 
+     IDLNCD
+FROM
+[$(V12_path_qvd)CIDMAS.qvd](qvd)
+WHERE IDCONO=200
+;
+
+
+///$tab facture
+FACTURE:
+LOAD 
+	 F5IVNA as MONTANT_FACTURE, 
+	 F5CONO & F5SUNO& F5PUNO & F5PNLI & F5PNLS  as KEY_FACTURE,
+	 F5INS1, 
+     F5INS2,
+     F5INS3, 
+     F5INS4, 
+     F5INS5
+FROM
+[$(V12_path_qvd)FGINLI.qvd]
+(qvd);
+
+///$tab Devise
+DEVISE:
+LOAD 
+	 CUCONO & CUCUCD & CULOCD & CUDIVI as KEY_DEVISE, 
+	 CUARAT 		as [Taux Conversion EUR],
+	 CULOCD,
+	 CUCUCD
+//     CUCHID, 
+//     CUCHNO, 
+//     CUCONO, 
+//     CUDIVI,
+//     CUCRTP, 
+//     CUCUCD, 
+//     CUCUTD,    
+//     CUDMCU, 
+//     CUGLOC, 
+//     CULMDT, 
+//     CULOCD, 
+//     CURAFA, 
+//     CURGDT, 
+//     CURGTM, 
+//     CUTXID
+FROM
+[$(V12_path_qvd)CCURRA.qvd](qvd)
+WHERE CUCRTP = 1 
+;
+
+///$tab MPLIND
+MPLIND:
+LOAD ICCONO & ICPUNO & ICPNLI & ICPNLS & ICPNLI  as KEY_RECEPTION,   
+ ICCONO,
+ ICPUNO,
+ ICPNLI,
+ ICPNLS,
+ ICRPQA,
+ ICREPN,
+ if(ICOEND=0,'0-Livraison Non Achevée','1-Livraison Achvée') as [MARQUE DE FIN],
+ ICARDT,
+ ICRPQT
+FROM
+[$(V12_path_qvd)MPLIND.qvd]
+(qvd);
+///$tab frais fixe / Budget
+// >> les onglets suivants constituent les frais fixes et budget.
+///$tab Responsable_SEG2
+
+RESPONSABLES_tmp:
+LOAD*,
+[CENTRE DE COUTS] as  [Key_Centre de couts] ,   // N° centre de cout FRANCE
+[CENTRE DE COUTS] as [Key_SEGMENT_2],
+[CENTRE DE COUTS] as KEY_SEGMENT_2_BUD 
+ ;
+LOAD DIRECTION, 
+     [RESPONSABLE BUDGETAIRE], 
+     if(IsText([CENTRE DE COUTS]),[CENTRE DE COUTS], num([CENTRE DE COUTS])) as [CENTRE DE COUTS],
+     [NOM CENTRE DE COUTS],// nom des centre de cout FRANCE
+     'FR' as PAYS
+FROM
+[$(path_XL_File)Arborescence SEG2.xlsx]
+(ooxml, embedded labels, table is arborescence_seg2, filters(
+Replace(1, top, StrCnd(null)),
+Replace(2, top, StrCnd(null))
+));
+Concatenate // concat des centre de couts US
+LOAD *,
+     [CENTRE DE COUTS] as [Key_SEGMENT_2],
+     [CENTRE DE COUTS]  as KEY_SEGMENT_2_BUD ,
+     [CENTRE DE COUTS] as  [Key_Centre de couts]// N° de centre de cout US
+;
+LOAD DIRECTION, 
+     [RESPONSABLE BUDGETAIRE], 
+     if(IsText([CENTRE DE COUTS_US]),[CENTRE DE COUTS_US],num([CENTRE DE COUTS_US]))  as [CENTRE DE COUTS],
+     'US' as PAYS 
+FROM
+[$(path_XL_File)Arborescence SEG2.xlsx]
+(ooxml, embedded labels, table is arborescence_seg2, filters(
+Replace(1, top, StrCnd(null)),
+Replace(2, top, StrCnd(null))
+));
+Concatenate // concat des centre de couts Turk
+LOAD *,
+     [CENTRE DE COUTS] as [Key_SEGMENT_2],
+     [CENTRE DE COUTS]  as KEY_SEGMENT_2_BUD ,
+     [CENTRE DE COUTS] as  [Key_Centre de couts] // N° de centre de cout Turk
+;
+LOAD DIRECTION, 
+     [RESPONSABLE BUDGETAIRE], 
+     if(IsText([CENTRE DE COUTS_EUFI]),[CENTRE DE COUTS_EUFI],num([CENTRE DE COUTS_EUFI]))  as [CENTRE DE COUTS],
+     'TRK' as PAYS
+FROM
+[$(path_XL_File)Arborescence SEG2.xlsx]
+(ooxml, embedded labels, table is arborescence_seg2, filters(
+Replace(1, top, StrCnd(null)),
+Replace(2, top, StrCnd(null))
+));
+
+left join // jointure avec l'ordre d'appartiion des différentes directions.
+LOAD DIRECTION, 
+     ORDRE
+FROM
+[$(path_XL_File)Arborescence SEG2.xlsx]
+(ooxml, embedded labels, table is DIRECTION_ORDRE);
+
+
+RESPONSABLES:
+NoConcatenate
+LOAD *
+Resident RESPONSABLES_tmp 
+//WHERE not isnull([NOM CENTRE DE COUTS])
+;
+
+drop table RESPONSABLES_tmp;
+///$tab FGLEDG hors france
+// lecture du QVD FGLEDG hors france (US et Turquie) 
+// !!!!!*************************Les segments 3 de ces pays sont equivalents aux segments 2 de la FRANCE , d'ou la modification spécifique sur la clé du bridge (KEY_BUDGET)
+FGLEDG_tmp:
+LOAD * ,
+EGDIVI  &'|'& [SEGMENT 1] &'|'& [SEGMENT 2] &'|'& [SEGMENT 3] &'|'& [SEGMENT 4] &'|'& [SEGMENT 5] &'|'& [SEGMENT 6] &'|'& left(EGACDT,6)  as KEY_BUDGET,
+text([SEGMENT 1]) as [Key_SEGMENT_1],
+num([SEGMENT 2]) as [Key_SEGMENT_2],
+YEAR(DATE_EC) as ANNEE_EC,
+MONTH(DATE_EC) as MOIS_EC
+ ;
+LOAD 
+	EGDIVI as EGDIVI_FGLEDG,
+	if(EGDIVI = '001', 'EFI' ,
+		if(EGDIVI = '005', 'EUFI' ,
+			if(EGDIVI = '003', 'EFC' , 
+				if(EGDIVI = '002', 'EFIS' ,
+					if(EGDIVI = '004', 'EFEC'
+					)
+				)
+			)
+		)
+	) as EGDIVI ,
+	EGACAM as MONTANT_EUROS, 
+     EGACDT, //Date ecriture comptable
+    makedate(left(EGACDT,4),mid(EGACDT,5,2),right(EGACDT,2))  as DATE_EC,
+ //    EGACQT, 
+    if(left(EGAIT1,2)=90,right(EGAIT1,len(EGAIT1)-2), EGAIT1) as [SEGMENT 1],   
+     EGAIT2 as [SEGMENT 3],  //***************************** attention aux segments ici****************************************
+     EGAIT3 as [SEGMENT 2],   
+     EGAIT4 as [SEGMENT 4],   
+     EGAIT5 as [SEGMENT 5],  
+     EGAIT6 as [SEGMENT 6],   
+     EGAIT7 as [SEGMENT 7],   
+     EGARAT, //taux de change
+     EGYEA4, //annee de comptabilisation
+     EGDIVI as Société, 
+     EGVTXT as LIBELLE_EC,
+     EGDBCR as SENS_EC, 
+//   EGARCD, 
+//     EGAT04, 
+     EGBSCD,
+     EGJRNO as [CODE JOURNAL],
+     EGJSNO as [SEQUENCE JOURNAL],  
+//     EGCHID as Auteur, 
+//     EGCHNO, 
+     EGCONO, 
+//     EGCRTP, 
+     EGCUAM as MONTANT_DEVISE, //montant en devise etrangere ou non
+     EGCUCD as DEVISE_REEL, 
+//     EGCVT1, 
+//     EGCVT2, 
+//     EGCVT3, 
+//     EGCVT4, 
+//     EGDCAM, 
+//     EGDCQT, 
+//     EGEICD, 
+//     EGERDT, 
+     EGFEID as ORIGINE_EC, //EC= ecriture comptale
+//     EGFNCN, 
+     EGFTCO, //Kezako
+//     EGGFL1, 
+//     EGGFL2, 
+//     EGGFL3, 
+//     EGGFL4, 
+//     EGGFL5, 
+//     EGLMDT, 
+//     EGOCDT, 
+//     EGRECO, 
+//     EGREDE, 
+//     EGRGDT, 
+//     EGRGTM, 
+//     EGSERS, 
+//     EGTCAM, 
+//     EGTCAR, 
+//     EGTCRT, 
+//     EGTDSC, 
+//     EGTGCD, 
+//     EGTHCC, 
+//     EGTOCD, 
+//     EGTRCD, 
+//     EGTXID, 
+//     EGUNIT, 
+//     EGVATD, 
+//     EGVATR, 
+ //    EGVDSC, 
+     EGVONO, //N° de pieces comptable
+//     EGVRNE, 
+     EGVSER //livre de compte
+//     EGVTCD, 
+//     EGVTP1, 
+//     EGVTP2, 
+FROM
+[$(V12_path_qvd)FGLEDG.qvd]
+(qvd)
+//on ne garde que les données provenant de la Turquie
+WHERE not wildmatch(EGDIVI,'010','085','001','002','004','003')
+and 
+ EGCONO=200
+;
+
+
+///$tab FGLEDG-fr
+FGLEDG_tmp:
+LOAD * ,
+EGDIVI  &'|'& [SEGMENT 1] &'|'& [SEGMENT 2] &'|'& [SEGMENT 3] &'|'& [SEGMENT 4] &'|'& [SEGMENT 5] &'|'& [SEGMENT 6] &'|'& left(EGACDT,6)  as KEY_BUDGET,
+text([SEGMENT 1]) as [Key_SEGMENT_1],
+num([SEGMENT 2]) as [Key_SEGMENT_2],
+YEAR(DATE_EC) as ANNEE_EC,
+MONTH(DATE_EC) as MOIS_EC
+ ;
+LOAD 
+	EGDIVI as EGDIVI_FGLEDG,
+	if(EGDIVI = '001', 'EFI' ,
+		if(EGDIVI = '005', 'EUFI' ,
+			if(EGDIVI = '003', 'EFC' , 
+				if(EGDIVI = '002', 'EFIS' ,
+					if(EGDIVI = '004', 'EFEC'
+					)
+				)
+			)
+		)
+	) as EGDIVI ,
+	EGACAM as MONTANT_EUROS, 
+     EGACDT, //Date ecriture comptable
+    makedate(left(EGACDT,4),mid(EGACDT,5,2),right(EGACDT,2))  as DATE_EC,
+ //    EGACQT, 
+    if(left(EGAIT1,2)=90,right(EGAIT1,len(EGAIT1)-2), EGAIT1) as [SEGMENT 1],     
+     EGAIT2 as [SEGMENT 2], 
+           
+     EGAIT3 as [SEGMENT 3],   
+     EGAIT4 as [SEGMENT 4],   
+     EGAIT5 as [SEGMENT 5],  
+     EGAIT6 as [SEGMENT 6],   
+     EGAIT7 as [SEGMENT 7],   
+     EGARAT, //taux de change
+     EGYEA4, //annee de comptabilisation
+     EGDIVI as Société, 
+     EGVTXT as LIBELLE_EC,
+     EGDBCR as SENS_EC, 
+//   EGARCD, 
+//     EGAT04, 
+     EGBSCD,
+     EGJRNO as [CODE JOURNAL],
+     EGJSNO as [SEQUENCE JOURNAL],  
+//     EGCHID as Auteur, 
+//     EGCHNO, 
+     EGCONO, 
+//     EGCRTP, 
+     EGCUAM as MONTANT_DEVISE, //montant en devise etrangere ou non
+     EGCUCD as DEVISE_REEL, 
+//     EGCVT1, 
+//     EGCVT2, 
+//     EGCVT3, 
+//     EGCVT4, 
+//     EGDCAM, 
+//     EGDCQT, 
+//     EGEICD, 
+//     EGERDT, 
+     EGFEID as ORIGINE_EC, //EC= ecriture comptale
+//     EGFNCN, 
+     EGFTCO, //Kezako
+//     EGGFL1, 
+//     EGGFL2, 
+//     EGGFL3, 
+//     EGGFL4, 
+//     EGGFL5, 
+//     EGLMDT, 
+//     EGOCDT, 
+//     EGRECO, 
+//     EGREDE, 
+//     EGRGDT, 
+//     EGRGTM, 
+//     EGSERS, 
+//     EGTCAM, 
+//     EGTCAR, 
+//     EGTCRT, 
+//     EGTDSC, 
+//     EGTGCD, 
+//     EGTHCC, 
+//     EGTOCD, 
+//     EGTRCD, 
+//     EGTXID, 
+//     EGUNIT, 
+//     EGVATD, 
+//     EGVATR, 
+ //    EGVDSC, 
+     EGVONO, //N° de pieces comptable
+//     EGVRNE, 
+     EGVSER //livre de compte
+//     EGVTCD, 
+//     EGVTP1, 
+//     EGVTP2, 
+FROM
+[$(M3_path_qvd)FGLEDG.qvd]
+(qvd)
+//on ne garde que depuis ce QVD les données de la FRANCE et US
+WHERE not wildmatch(EGDIVI,'010','085','005','004')
+and 
+ EGCONO=200
+; 
+///$tab FGLEDG_FIN
+FGLEDG:
+NoConcatenate
+LOAD 
+     text([SEG1-FR]) as [Key_SEGMENT_1]
+FROM
+[$(path_XL_File)Arborescence SEG1.xlsx]
+(ooxml, embedded labels, table is Hiérarchie_SEG1);
+Concatenate
+LOAD 
+     text([SEG1-US]) as [Key_SEGMENT_1]
+FROM
+[$(path_XL_File)Arborescence SEG1.xlsx]
+(ooxml, embedded labels, table is Hiérarchie_SEG1);
+Concatenate
+LOAD
+     text([SEG1-TRK]) as [Key_SEGMENT_1]
+FROM
+[$(path_XL_File)Arborescence SEG1.xlsx]
+(ooxml, embedded labels, table is Hiérarchie_SEG1);
+left join
+LOAD *
+Resident FGLEDG_tmp;
+
+DROP TABLE FGLEDG_tmp;
+//
+////une fois que la jointure avec le fichier Xl pour ne retourner que les segments 1, 
+////On refait la meme opération avece les segments 2
+inner join (FGLEDG)
+LOAD
+Distinct [Key_SEGMENT_2]
+Resident RESPONSABLES ;
+
+Concatenate(FGLEDG) //integration des reconciliations
+LOAD *,
+EGDIVI  &'|'& [SEGMENT 1] &'|'& [SEGMENT 2] &'|'& '' &'|'& '' &'|'& '' &'|'& '' &'|'&  left(EGACDT,6)  as KEY_BUDGET
+;
+LOAD 
+	  Société as EGDIVI, 
+      year(Date) & if(num(month(Date))<10, '0'&num(month(Date)), num(month(Date))) & day(Date) as EGACDT ,
+     [Seg 1] as [SEGMENT 1], 
+     [Seg 2] as [SEGMENT 2],
+     Amount as MONTANT_EUROS, 
+     Currency as DEVISE_REEL,
+     'X' as Flag_reconcicliation
+FROM
+[$(path_XL_File)Reconciliation.xlsx]
+(ooxml, embedded labels, table is Reconciliation)
+WHERE not IsNull(Amount)
+;
+
+
+
+drop field [Key_SEGMENT_2] ;
+
+
+///$tab Budget-hors france
+//********************************************* on recupere ici le budget en dehors de la FRANCE et de la CHINE. (US et Turquie)********************************************************
+// !!!!!*************************Les segments 3 de ces pays sont equivalents aux segments 2 de la FRANCE , d'ou la modification spécifique sur la clé du bridge (KEY_BUDGET)
+trace Lecture des budgets hors France ;
+
+VERSION_BUDGET :
+LOAD 
+text(SOCIETE) as CONFIG_SOCIETE, 
+ANNEE as CONFIG_ANNEE,
+ if(VERSION<10,'00'&VERSION,
+	if( VERSION>100,VERSION,
+'0'&VERSION)
+) as VERSION, 
+	 NUM_BUDGET,
+     CURRENCY as CONFIG_DEVISE
+FROM
+[$(path_XL_File)config_version_budget.xlsx]
+(ooxml, embedded labels, table is Version_Budget)
+WHERE WildMatch(SOCIETE,'003','005');
+
+
+TRACE NoOfRows('VERSION_BUDGET') ;
+
+FOR i = 0 to (NoOfRows('VERSION_BUDGET')-1)
+	
+	let societe    = peek('CONFIG_SOCIETE',$(i),'VERSION_BUDGET') ;
+	let version    = peek('VERSION',$(i),'VERSION_BUDGET') ;
+	let annee      = peek('CONFIG_ANNEE',$(i),'VERSION_BUDGET') ;
+	let num_budget = peek('NUM_BUDGET',$(i),'VERSION_BUDGET') ;
+		
+		trace ligne $(i) pour la societe $(societe) ;
+		
+  if not IsNull($(num_budget)) then
+		[DETAIL BUDGET_tmp] : 
+		LOAD *,
+		BCDIVI  &'|'& [BUD_SEGMENT1] &'|'& [BUD_SEGMENT2] &'|'& [BUD_SEGMENT3] &'|'& [BUD_SEGMENT4] &'|'& [BUD_SEGMENT5] &'|'& [BUD_SEGMENT6] &'|'&  BCBUPE  as KEY_BUDGET
+		;
+		LOAD 
+			if(left(BCAIT1,2)=90,right(BCAIT1,len(BCAIT1)-2), BCAIT1) as [BUD_SEGMENT1],
+			text(if(left(BCAIT1,2)=90,right(BCAIT1,len(BCAIT1)-2), BCAIT1)) as [KEYSEGMENT_1],
+			 BCAIT1,
+		     BCAIT2 as [BUD_SEGMENT3],//*********************Attention l'inversement des segmetns se passe ici***********************************************
+		     num(BCAIT3) as KEY_SEGMENT_2_BUD,
+		     BCAIT3 as [BUD_SEGMENT2],
+		     BCAIT4 as [BUD_SEGMENT4],
+		     BCAIT5 as [BUD_SEGMENT5],
+		     BCAIT6 as [BUD_SEGMENT6], 
+		     BCAIT7  as [BUD_SEGMENT7], 
+		//     BCAMTN, 
+		//     BCARAT, 
+		     BCBCUA as  MONTANT_BUDGET_DEVISE, 
+		     BCBLAM  as MONTANT_BUDGET_EURO, 
+		     BCBUDQ, 
+		     left(year(today()),2) & BCBUNO as BCBUNO, 
+		     BCBUPE, 
+		     BCBVER, 
+		     BCCHID, 
+		     BCCHNO, 
+		     BCCONO, 
+		     BCCUCD as DEVISE_BUDGET, 
+		    // BCDIVI,
+		     if(BCDIVI = '001', 'EFI' ,
+				if(BCDIVI = '005', 'EUFI' ,
+					if(BCDIVI = '003', 'EFC' , 
+						if(BCDIVI = '002', 'EFIS' ,
+							if(BCDIVI = '004', 'EFEC'
+							)
+						)	
+					)
+				)
+			) as BCDIVI 
+		FROM [$(V12_path_qvd)FBUDET.qvd] (qvd)
+		WHERE BCCONO = 200
+		and BCDIVI = $(societe)
+		and BCBVER = $(version)
+		and BCBUNO = $(num_budget)
+		and left(BCBUPE,4) = $(annee)
+			;
+	end if	
+next i
+
+
+
+
+// drop table de la table des versions de budgets hors france
+drop table VERSION_BUDGET;
+
+
+///$tab Budget-fr
+// Ce fichier excel est un fichier de config qui permet aux users de rentrer des parametres sur les versions de budget souhaité
+
+CONFIG_BUDGET:
+LOAD 
+text(SOCIETE) as CONFIG_SOCIETE, 
+ANNEE as CONFIG_ANNEE,
+ if(VERSION<10,'00'&VERSION,
+	if( VERSION>100,VERSION,
+'0'&VERSION)
+) as VERSION, 
+	 NUM_BUDGET,
+     CURRENCY as CONFIG_DEVISE
+FROM
+[$(path_XL_File)config_version_budget.xlsx]
+(ooxml, embedded labels, table is Version_Budget)
+WHERE wildmatch(SOCIETE,'001','002')
+;
+
+TRACE NoOfRows('CONFIG_BUDGET') ;
+
+FOR i = 0 to (NoOfRows('CONFIG_BUDGET')-1)
+	
+	let societe    = peek('CONFIG_SOCIETE',$(i),'CONFIG_BUDGET') ;
+	let version    = peek('VERSION',$(i),'CONFIG_BUDGET') ;
+	let annee      = peek('CONFIG_ANNEE',$(i),'CONFIG_BUDGET') ;
+	let num_budget = peek('NUM_BUDGET',$(i),'CONFIG_BUDGET') ;
+		
+		trace ligne $(i) ;
+		
+  if not IsNull($(num_budget)) then
+		[DETAIL BUDGET_tmp] : 
+		LOAD *,
+		BCDIVI  &'|'& [BUD_SEGMENT1] &'|'& [BUD_SEGMENT2] &'|'& [BUD_SEGMENT3] &'|'& [BUD_SEGMENT4] &'|'& [BUD_SEGMENT5] &'|'& [BUD_SEGMENT6] &'|'&  BCBUPE  as KEY_BUDGET
+		;
+		LOAD 
+			if(left(BCAIT1,2)=90,right(BCAIT1,len(BCAIT1)-2), BCAIT1) as [BUD_SEGMENT1],
+			text(if(left(BCAIT1,2)=90,right(BCAIT1,len(BCAIT1)-2), BCAIT1)) as [KEYSEGMENT_1],
+			 BCAIT1,
+		     BCAIT2 as [BUD_SEGMENT2],
+		     num(BCAIT2) as KEY_SEGMENT_2_BUD,
+		     BCAIT3 as [BUD_SEGMENT3],
+		     BCAIT4 as [BUD_SEGMENT4],
+		     BCAIT5 as [BUD_SEGMENT5],
+		     BCAIT6 as [BUD_SEGMENT6], 
+		     BCAIT7  as [BUD_SEGMENT7], 
+		//     BCAMTN, 
+		//     BCARAT, 
+		     BCBCUA as  MONTANT_BUDGET_DEVISE, 
+		     BCBLAM  as MONTANT_BUDGET_EURO, 
+		     BCBUDQ, 
+		     left(year(today()),2) & BCBUNO as BCBUNO, 
+		     BCBUPE, 
+		     BCBVER, 
+		     BCCHID, 
+		     BCCHNO, 
+		     BCCONO, 
+		     BCCUCD as DEVISE_BUDGET, 
+		    // BCDIVI,
+		     if(BCDIVI = '001', 'EFI' ,
+				if(BCDIVI = '005', 'EUFI' ,
+					if(BCDIVI = '003', 'EFC' , 
+						if(BCDIVI = '002', 'EFIS' ,
+							if(BCDIVI = '004', 'EFEC'
+							)
+						)	
+					)
+				)
+			) as BCDIVI 
+			FROM
+			[$(M3_path_qvd)FBUDET.qvd](qvd)
+			WHERE BCCONO = 200
+			and BCDIVI = $(societe)
+			and BCBVER = $(version)
+			and BCBUNO = $(num_budget)
+			and left(BCBUPE,4) = $(annee)
+			;
+	end if	
+next i
+
+
+drop table CONFIG_BUDGET ;
+///$tab BUDGET _FIN
+// le budget FRance et hors france sont desormais concat
+// Process pour y lire  et retourner  que les segments 1 aouhaités.
+//Regroupement des 3 segments1, en une seule colonne, puis jointure à la table des budgets
+// Tests fait le 04/12/2014 , ok
+
+[DETAIL BUDGET]:
+LOAD
+     text([SEG1-FR]) as KEYSEGMENT_1
+FROM
+[$(path_XL_File)Arborescence SEG1.xlsx]
+(ooxml, embedded labels, table is Hiérarchie_SEG1);
+Concatenate
+LOAD 
+     text([SEG1-US])  as KEYSEGMENT_1
+FROM
+[$(path_XL_File)Arborescence SEG1.xlsx]
+(ooxml, embedded labels, table is Hiérarchie_SEG1);
+Concatenate
+LOAD
+     text([SEG1-TRK])  as KEYSEGMENT_1
+FROM
+[$(path_XL_File)Arborescence SEG1.xlsx]
+(ooxml, embedded labels, table is Hiérarchie_SEG1);
+left join
+LOAD
+*
+resident [DETAIL BUDGET_tmp] ;
+ 
+drop table [DETAIL BUDGET_tmp] ;
+//une fois que la jointure avec le fichier Xl pour ne retourner que les segments 1, 
+//On refait la meme opération avece les segments 2
+inner join ([DETAIL BUDGET])
+LOAD
+distinct KEY_SEGMENT_2_BUD
+Resident RESPONSABLES ;
+
+ 
+
+drop field KEY_SEGMENT_2_BUD ;
+
+
+///$tab Bridge
+BRIDGE_tmp : 
+LOAD 
+KEY_BUDGET,
+subfield(KEY_BUDGET,'|',1) as SOCIETE,
+subfield(KEY_BUDGET,'|',2) as Segment_1,
+//subfield(KEY_BUDGET,'|',2) as KEY_SEGMENT_1 ,
+subfield(KEY_BUDGET,'|',3) as Segment_2,
+ subfield(KEY_BUDGET,'|',3) as [Key_Centre de couts],
+subfield(KEY_BUDGET,'|',4) as Segment_3,
+subfield(KEY_BUDGET,'|',5) as Segment_4,
+subfield(KEY_BUDGET,'|',6) as Segment_5,
+subfield(KEY_BUDGET,'|',7) as Segment_6,
+subfield(KEY_BUDGET,'|',8) as ANNEE_MOIS
+Resident [DETAIL BUDGET] ;
+concatenate
+LOAD 
+KEY_BUDGET,
+subfield(KEY_BUDGET,'|',1) as SOCIETE,
+subfield(KEY_BUDGET,'|',2) as Segment_1,
+//subfield(KEY_BUDGET,'|',2) as KEY_SEGMENT_1 ,
+subfield(KEY_BUDGET,'|',3) as Segment_2,
+subfield(KEY_BUDGET,'|',3) as [Key_Centre de couts],
+subfield(KEY_BUDGET,'|',4) as Segment_3,
+subfield(KEY_BUDGET,'|',5) as Segment_4,
+subfield(KEY_BUDGET,'|',6) as Segment_5,
+subfield(KEY_BUDGET,'|',7) as Segment_6,
+subfield(KEY_BUDGET,'|',8) as ANNEE_MOIS
+Resident [FGLEDG] ;
+//LOAD  
+//KEY_BUDGET,
+//subfield(KEY_BUDGET,'|',1) as SOCIETE,
+//subfield(KEY_BUDGET,'|',2) as Segment_1,
+////subfield(KEY_BUDGET,'|',2) as KEY_SEGMENT_1 ,
+//subfield(KEY_BUDGET,'|',3) as Segment_2,
+//subfield(KEY_BUDGET,'|',3) as [Key_Centre de couts],
+//subfield(KEY_BUDGET,'|',4) as Segment_3,
+//subfield(KEY_BUDGET,'|',5) as Segment_4,
+//subfield(KEY_BUDGET,'|',6) as Segment_5,
+//subfield(KEY_BUDGET,'|',7) as Segment_6,
+//subfield(KEY_BUDGET,'|',8) as ANNEE_MOIS
+//Resident RECONCILIATION ;
+
+
+NoConcatenate
+BRIDGE:
+LOAD 
+*,
+left(ANNEE_MOIS,4)  as ANNEE_Fin,
+right(ANNEE_MOIS,2) as MOIS_Fin,
+'Q'&ceil(right(ANNEE_MOIS,2)/3) as Quarter_Fin,
+'S'&if(right(ANNEE_MOIS,2)<7,1,2) as Semester 
+Resident BRIDGE_tmp 
+WHERE not isnull(left(ANNEE_MOIS,4)) and not IsNull(right(ANNEE_MOIS,2))
+;
+
+drop table BRIDGE_tmp;
+///$tab nature comptable_SEG1
+//TAble rattachée au bridge
+Hierarchie_SEGMT1:
+LOAD [Group Accounting], 
+     [Group Cost Control], 
+     Famille, 
+     [SEG1-FR] as Segment_1, 
+     Desc as Description
+FROM
+[$(path_XL_File)Arborescence SEG1.xlsx]
+(ooxml, embedded labels, table is Hiérarchie_SEG1);
+Concatenate
+LOAD [Group Accounting], 
+     [Group Cost Control], 
+     Famille,  
+     [SEG1-US]as Segment_1,
+     [Desc-US]as Description
+FROM
+[$(path_XL_File)Arborescence SEG1.xlsx]
+(ooxml, embedded labels, table is Hiérarchie_SEG1);
+Concatenate
+LOAD [Group Accounting], 
+     [Group Cost Control], 
+     Famille, 
+     [SEG1-TRK] as Segment_1, 
+     [Desc-TRK] as Description
+FROM
+[$(path_XL_File)Arborescence SEG1.xlsx]
+(ooxml, embedded labels, table is Hiérarchie_SEG1);
+///$tab drop tablle
+
+
+///$tab language
+TRADUCTION:
+LOAD Code, 
+     FR, 
+     EN
+FROM
+[$(path_language_referential)REF_Language.xlsx]
+(ooxml, embedded labels, table is CA);
+
+
+PICKED_LANGUAGE:
+LOAD * Inline [
+%Language,
+FR,
+EN
+
+];

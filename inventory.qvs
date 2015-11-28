@@ -1,0 +1,864 @@
+﻿///$tab Main
+SET ThousandSep=' ';
+SET DecimalSep=',';
+SET MoneyThousandSep=' ';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='# ##0,00 €;-# ##0,00 €';
+SET TimeFormat='hh:mm:ss';
+SET DateFormat='DD/MM/YYYY';
+SET TimestampFormat='DD/MM/YYYY hh:mm:ss[.fff]';
+//SET MonthNames='janv.;févr.;mars;avr.;mai;juin;juil.;août;sept.;oct.;nov.;déc.';
+//SET DayNames='lun.;mar.;mer.;jeu.;ven.;sam.;dim.';
+SET MonthNames='Jan;Feb;Mar;Apr.;May.;Jun.;Jul.;Aug;Sep.;Oct.;Nov.;Dec.';
+SET DayNames='Monday;Tuesday;Wednesday;Thursday;Friday;Saturday;Sunday';
+     
+//SET HidePrefix = '%';
+
+//Paramétrage de l'application
+
+LET vProfondeurHisto = month(today())+24;
+
+//Variables de répertoires
+SET vFolderDataStore = ..\..\..\DataStore\;
+SET vFolderReferentials = $(vFolderDataStore)Referentials\STOCKS\IT\;
+
+
+SET vFolderTemp=$(vFolderDataStore)Temp\;
+
+SET vEnvironnementSource = 'Prod\Stock';
+SET vEnvironnementSource_1 = 'Prod';
+
+SET vFolderExtract = $(vFolderDataStore)Extract\;
+SET vFolderTransformStock = $(vFolderDataStore)Transform\STOCKS\;
+SET vFolderTransform = $(vFolderDataStore)Transform\;
+
+
+
+SET vFolder = $(vFolderExtract)V12\$(vEnvironnementSource)\;
+SET vFolder_1 = $(vFolderExtract)V12\$(vEnvironnementSource_1)\;
+SET vFolderSplit = $(vFolder)Split\;
+
+//Variable M3 (à mettre à jours au moment de bascule vers M3
+SET vFolderM3 = $(vFolderExtract)M3\$(vEnvironnementSource)\;
+SET vFolderM3_1 = $(vFolderExtract)M3\$(vEnvironnementSource_1)\;
+SET vFolderSplitM3 = $(vFolderM3)Split\;
+//ODBC CONNECT TO [BDD EIS] (XUserId is DHeASSFNTDPB, XPassword is LBdJUSFNTDJB);
+
+SET vTOP = 10;
+
+
+
+//Variables de couleurs
+LET vColorTitle = rgb(229,52,44);
+LET vColorButtonOn = LightGreen();
+LET vColorButtonOff = LightGray();
+LET vColorLabels = rgb(40,136,138);
+
+LET vColorTab1 = rgb(178,223,219);
+LET vColorTab2 = rgb(0,150,136);
+LET vColorRed = rgb(211,47,47); 
+LET vColorTotal = rgb(178,223,219);
+
+LET vColorLabelOn = rgb(40,136,138);
+LET vColorLabelOff = lightGray();
+
+//Variables de menus
+LET vActiveMenu = 1;
+
+	
+//Chargement des libellés dans les différentes langues
+%TRADUCTION:
+LOAD Code as LanguageCode, 
+     FR, 
+     EN, 
+     ES, 
+     TR, 
+     CN
+FROM
+$(vFolderReferentials)REF_Language.xlsx
+(ooxml, embedded labels, table is PRD);
+
+
+SET vLanguage = EN;
+LET vFuncTrad = 'minstring({<LanguageCode = {$1}>} '&'$'&'(vLanguage)'&')';
+
+
+SET vDevise=GROUPE;
+
+DIM_UNITES:
+LOAD * INLINE [
+%DimUnite, %DimUniteFacteur
+Units, 1
+KUnits, 1000
+MUnits, 1000000
+];
+
+
+AIDE:
+LOAD * INLINE [
+ANNEE_AIDE,	AIDE
+1990,	Libération de Nelson MANDELA
+2008,	B.OBAMA devient président des Etats unis
+1998,	La France gagne la coupe du monde de Football
+1985,	Création des restos du cœur
+2010,	Stephane Guillon est remercié par France Inter
+2011,	Révolution arabe
+2011,	Mariage princier en Angleterre
+1986,	Prince chante 'Kiss'
+
+];
+///$tab Versionning
+
+%VERSION:
+LOAD * INLINE [
+%Version_No, %Version_Desc, %Version_Qui
+'0.01', Version initiale, ARUBI
+];
+///$tab MAPPING
+
+//MAP_FACI_SOCIETE_TMP:
+//LOAD * INLINE [
+//    FACI, 	SOCIETE, FACI_M3
+//    BEY, 	EFI
+//    EFI, 	EFI
+//    DIS, 	EFI
+//    CHN, 	EFEC
+//    CHI, 	EFEC
+//    039, 	EFEC
+//    049, 	EFEC
+//    US, 	EFC
+//    UFP, 	EUFI
+//    UFI, 	EUFI
+//];
+//
+//
+//MAP_FACI_SOCIETE:
+//Mapping LOAD FACI,
+//			SOCIETE
+//Resident MAP_FACI_SOCIETE_TMP; 
+//
+////drop table MAP_SOCIETE_TMP;
+//
+//Map_Devise:
+//Mapping LOAD 
+//	SOCIETE as CD_SOCIETE,
+//	DEVISE 	as Map_DEVISE 
+//INLINE [
+//    SOCIETE, DEVISE
+//    1, EUR
+//    3, USD
+//    4, RMB
+//    5, TRL
+//];
+//
+//
+//Map_Societe_Zone_Pays:
+//LOAD 	SOCIETE as CD_SOCIETE,
+//		NomSociété 	as SOCIETE, 
+//     	Zone 		as M_Zone, 
+//     	Pays 		as M_Pays,
+//     	ApplyMap('Map_Devise',num(SOCIETE)) as MAP_DEVISE
+////     	,Devise 	
+//FROM
+//$(vFolderReferentialsProduction)PRODUCTION_Ref_Zones_Pays.xlsx
+//(ooxml, embedded labels, table is Data);
+
+
+REFERENTIEL:
+LOAD 
+	//num(CD_SOCIETE,000)&FACI&DEPOT as %KEY_REFERENTIEL,
+	//DEPOT, 
+     num(CD_SOCIETE,000)&FACI&DEPOT&ITNO as %KEY_REFERENTIEL_2, 
+     //SOCIETE 	as M_SOCIETE,
+     SOCIETE 	as M_SOCIETE,
+     ITNO 		as M_ITNO,
+     DEPOT 		as M_DEPOT, 
+     //DEPOT,
+     //FACI,
+     FACI 		as M_FACI,
+     DEVISE 	as M_Devise, 
+     ZONE 		as M_Zone, 
+     PAYS 		as M_Pays, 
+     num(CD_SOCIETE,000) as CD_SOCIETE, 
+     //if(Exists(FACI),1,0) as TestExiste,
+     FACI_M3, 
+     CD_SOCIETE_M3
+FROM
+$(vFolderTransform)REFERENTIEL_SOCIETE_V12_M3.qvd
+(qvd);
+
+MAP_CD_SOCIETE_SOCIETE:
+Mapping load 	CD_SOCIETE,
+				M_SOCIETE as NomCourt_SOCIETE
+Resident REFERENTIEL;
+
+MAP_CD_SOCIETE_DEPOT:
+Mapping load 	CD_SOCIETE,
+				M_DEPOT
+Resident REFERENTIEL;
+
+MAP_SOCIETE_ITNO:
+Mapping load 	M_SOCIETE,
+				M_ITNO
+Resident REFERENTIEL;
+
+MAP_CD_SOCIETE_FACI:
+Mapping load 	CD_SOCIETE,
+				M_FACI
+Resident REFERENTIEL;
+
+MAP_SOCIETE_FACI:
+Mapping load 	M_FACI,
+				M_SOCIETE
+Resident REFERENTIEL;
+
+MAP_FACI_DEPOT:
+Mapping load 	M_DEPOT,
+				M_FACI
+Resident REFERENTIEL;
+
+MAP_DEPOT_ITNO:
+Mapping load 	M_ITNO,
+				M_DEPOT
+Resident REFERENTIEL;
+
+MAP_FACI_ITNO:
+Mapping load 	M_ITNO,
+				M_FACI
+Resident REFERENTIEL;
+
+/************************************************************************************************/
+/**** MAL 16/06/2015
+/*********** mapping basé sur le fichier excel d'isabelle  *****/
+
+Map_FACI_V12_M3:
+Mapping load 
+	V12_DATA as FACI_V12, 
+     M3_DATA as FACI_M3
+FROM
+$(vFolderTransform)MAPPING_V12_M3.qvd
+(qvd)
+where FILD = 'FACI'
+;
+
+Map_WHLO_V12_M3:
+Mapping load 
+	V12_DATA as WHLO_V12, 
+     M3_DATA as WHLO_M3
+FROM
+$(vFolderTransform)MAPPING_V12_M3.qvd
+(qvd)
+where FILD = 'WHLO'
+;
+
+
+Map_FACI_WHLO_M3:
+Mapping load 
+	if(FILD = 'FACI',M3_DATA )	as FACI_M3, 
+     if(FILD = 'WHLO',M3_DATA )	as WHLO_M3
+FROM
+$(vFolderTransform)MAPPING_V12_M3.qvd
+(qvd)
+//where FILD = 'WHLO'
+;
+
+
+Map_WHLO_FACI_M3:
+Mapping load 
+     if(FILD = 'WHLO',M3_DATA )	as WHLO_M3,
+	if(FILD = 'FACI',M3_DATA )	as FACI_M3
+
+FROM
+$(vFolderTransform)MAPPING_V12_M3.qvd
+(qvd)
+//where FILD = 'WHLO'
+;
+
+///////////////////////////////
+// Mapping M3 vers V12
+Map_FACI_M3_V12:
+Mapping load 
+	M3_DATA 	as FACI_M3,
+	V12_DATA 	as FACI_V12 
+     
+FROM
+[$(vFolderTransform)MAPPING_V12_M3.qvd]
+(qvd)
+where FILD = 'FACI'
+;
+
+Map_WHLO_M3_V12:
+Mapping load 
+	M3_DATA 	as WHLO_M3,
+	V12_DATA 	as WHLO_V12 
+    
+FROM
+[$(vFolderTransform)MAPPING_V12_M3.qvd]
+(qvd)
+where FILD = 'WHLO'
+;
+
+
+
+
+
+
+
+///$tab MITMAS
+//////////////////////////////////////////////////////////////////
+/// M3
+for each fileM3 in FileList('$(vFolderM3)*MITMAS.qvd')
+MITMAS_tmp_M3:
+LOAD 	
+		
+		MMITNO ,
+		MMSTAT, 						// Statut 
+		MMITCL 			as TECHNO, 
+		trim(MMITDS) 	as MMITDS ,		//as 'Description Produit, 
+		MMUNMS, 						//unité de mesure
+		MMRESP as ITEM_RESP, 			// groupe produit
+		MMITGR as ITEM_GROUP,			// itno groupe 
+		
+		MMITTY,
+     	MMCFI4,
+		MMCFI4 as MANUF_LINE,
+
+		
+		makedate(	right(left(FileName(),8),4), 
+					mid(left(FileName(),8),3,2), 
+					left(left(FileName(),8),2) 	) as DATE_EXTRACT_MITMAS
+	FROM $(fileM3)(qvd)
+	;
+next fileM3
+
+NoConcatenate
+
+MITMAS:
+LOAD *,
+	'M3' 	as MITMAS_ORIGINE,
+	(MMITNO&DATE_EXTRACT_MITMAS)&'M3' as %KET_FACT_MITMAS
+resident MITMAS_tmp_M3 ;
+
+drop Table MITMAS_tmp_M3;
+///$tab MITBAL
+
+//// M3
+
+//demande annuelle
+for each fileM3 in FileList('$(vFolderM3)*MITBAL.qvd')
+
+	MITBAL_tmp1_M3:
+	LOAD
+		 num(MBYEQT,'# ##0,000') as CONSO_ANNUELLE, // consommation annuelle 
+		 MBUSYE, // demande annuelle année glissante -> à utiliser lors de la validation dece champs dans l'erp
+		 MBYEQM, // methode calcule demande annuelle (0 : Manuelle , 1 : Automatique)
+		 MBITNO, 
+		 MBDIVI, 
+		 MBFACI,
+		 MBSTAT,
+		 MBPUIT as F_CodeAcq,
+		 date(date#(MBIDDT,'YYYYMMDD')) as DATE_ENTREE, // date dernière entrée
+		 date(date#(MBODDT,'YYYYMMDD')) as DATE_DER_SORTIE, // date dernière sortie
+
+		 ApplyMap('MAP_CD_SOCIETE_SOCIETE',MBDIVI) 	as SOCIETE,
+		 MBWHLO,
+		
+		 makedate(right(left(FileName(),8),4), mid(left(FileName(),8),3,2), left(left(FileName(),8),2) ) as DATE_MITBAL
+     FROM $(fileM3)(qvd)     
+     ;
+next fileM3
+
+NoConcatenate
+MITBAL_M3:
+LOAD *,
+	MBFACI &'|'& MBWHLO &'|'& MBITNO &'|'& DATE_MITBAL&'|'&'M3' 		as %KEY_FACT_MITBAL // clé vers le stock pour les demandes annuelles
+	//,num(MBDIVI,000)&MBFACI&MBWHLO 		as %KEY_REFERENTIEL
+	,MBDIVI&MBFACI&MBWHLO&MBITNO 		as %KEY_REFERENTIEL_2
+resident MITBAL_tmp1_M3;
+
+drop table MITBAL_tmp1_M3;
+///////////
+MITBAL:
+//Load *,
+//	'V12' as MITBAL_ORIGINE
+//Resident MITBAL_V12;
+//Concatenate
+Load *,
+	'M3' as MITBAL_ORIGINE
+Resident MITBAL_M3;
+
+//drop table MITBAL_V12;
+drop table MITBAL_M3;
+///$tab MITFAC
+for each fileM3 in FileList('$(vFolderM3)*MITFAC.qvd')
+	MITFAC_tmp1_M3:
+		LOAD 
+			M9ITNO, 
+			M9FACI, 
+			M9UCOS,
+			M9VAMT, //Methode gestion Comptable 24112015
+			M9ACRF, //objet controle comptable
+			num(M9APPR,'# ##0,000') as M9APPR,  //tarif moyen des produits 
+			makedate(right(left(FileName(),8),4), mid(left(FileName(),8),3,2), left(left(FileName(),8),2)) as DATE_EXTRACT
+		FROM $(fileM3)(qvd)
+		where M9CONO = 200
+		;
+next fileM3;
+
+NoConcatenate
+
+MITFAC:
+LOAD 	*,
+	'M3' as MITFAC_ORIGINE,
+	(M9ITNO&M9FACI&num(DATE_EXTRACT))&'M3' 		as %KEY_FACT_MITFAC
+Resident MITFAC_tmp1_M3
+;
+DROP table MITFAC_tmp1_M3;
+
+///$tab M3_STOCK_TMP
+// données de la table MITLOC
+
+for each fileM3 in FileList('$(vFolderM3)*STOCK.qvd')
+		
+	STOCK_tmp1_M3:
+		LOAD  
+			*,
+			num(DATE_EXTRACT) as NUM_DATE // cjhamp pour les intervalles des livres non factures
+		;
+		LOAD 
+			
+			DEPOT,
+			//DEPOT as F_CodeDepot,
+			DEPOT as S_DEPOT,
+			ITNO, 				// Ref Article
+			FACI as %FACI, 				// Etablissement
+		
+			'STOCK' as TYPE,	// TYPE : Identifier les lignes dans la table FACT
+			//date(date#(IDDT,'YYYYMMDD'))as DATE_ENTREE,
+			//date(date#(ODDT,'YYYYMMDD'))as DATE_DER_SORTIE,
+			ODDT 	as TEST_DER_DATE_SORTIE,
+			STAS 	as S_STATUT_STOCK, 
+			NSTQ 	as TMP_S_QT_STOCK_REEL, 
+			if( NSTQ < 0, 'Stock Negatif', 'Stock Positif') 	as S_FLAG_QT_STOCK, 	// si QT Stock < 0
+			if( NSTQ < 0, 0, NSTQ) 	as S_QT_STOCK_CORRIGE,
+			MLBANO 					as S_NUM_LOT,
+			MLCAMU 					as S_CONTENEUR,     
+			MLRGTM   				as S_MLRGTM,
+			//MLWHSL, // Emplacement -> enlevé car double les lignes et pas besoin pour les analyses pour le moment (vu avec CDG)
+			makedate(	right(left(FileName(),8),4), 
+						mid(left(FileName(),8),3,2), 
+						left(left(FileName(),8),2) 	) as DATE_EXTRACT
+	    
+		FROM $(fileM3)(qvd)
+	
+		;
+
+	
+next fileM3
+
+
+///$tab M3_STOCK
+
+STOCK_M3:
+LOAD
+	NUM_DATE, 
+	DEPOT,
+	S_DEPOT,
+	ITNO, 				
+	%FACI, 				
+	TYPE,	
+	S_STATUT_STOCK, 
+	S_FLAG_QT_STOCK, 	
+	sum(S_QT_STOCK_CORRIGE) as S_QT_STOCK_CORRIGE,
+	//S_NUM_LOT,
+	//S_CONTENEUR,     
+	//S_MLRGTM,
+	DATE_EXTRACT,
+	
+	//MLWHSL as S_EMPLACEMENT,
+	'M3' as STOCK_V12_M3,
+	//max(DATE_ENTREE) 		as DATE_ENTREE,
+	//max(DATE_DER_SORTIE)	as DATE_DER_SORTIE,
+	//TEST_DER_DATE_SORTIE,
+							
+	//max(TMP_DATE_ENTREE) 		as DATE_ENTREE, 	
+	//max(TMP_DATE_DER_SORTIE) 	as DATE_DER_SORTIE, 
+	sum(TMP_S_QT_STOCK_REEL) 	as S_QT_STOCK_REEL
+Resident STOCK_tmp1_M3
+Group by
+	NUM_DATE, 
+	DEPOT,
+	S_DEPOT,
+	ITNO, 				
+	%FACI, 				
+	TYPE,	
+	S_STATUT_STOCK, 
+	S_FLAG_QT_STOCK, 	
+	S_QT_STOCK_CORRIGE,
+	//TEST_DER_DATE_SORTIE,
+	//S_NUM_LOT,
+	//S_CONTENEUR,     
+	//S_MLRGTM,
+	DATE_EXTRACT,
+	//MLWHSL,
+	'M3'
+;
+drop table STOCK_tmp1_M3;
+
+///$tab M3_LNF
+for each file in FileList('$(vFolderM3)*LIVRESNONFACTURE.qvd')
+			
+		LIVRESNONFACTURES_tmp_M3:
+		LOAD distinct
+			//STE 				as LNF_STE,
+			REF 				as ITNO,
+			'LNF'				as TYPE,
+			DEPOT 				as DEPOT, 
+			//DEPOT as F_CodeDepot,
+			//DEPOT 				as LNF_DEPOT,
+//			if(ETABLISSEMENT = ApplyMap('MAP_FACI_DEPOT',DEPOT) , ETABLISSEMENT , ApplyMap('MAP_FACI_DEPOT',DEPOT))	as %FACI,
+			ETABLISSEMENT		as %FACI,
+			//ETABLISSEMENT as F_Etablissement,
+			// TECHNO 			as LNF_TECHNO, 
+			[CLIENT PAYEUR] 	as LNF_CLIENT_PAYEUR, 
+			OKCUNM 				as LNF_OKCUNM, 		// Nom Client
+			BL 					as LNF_BL, 			// Bon de Livraison
+			UBRGDT 				as LNF_UBRGDT, 		// Date d'entrée
+			[DATE FACTURE] 		as LNF_DATE_FACTURE, 
+			STATUS 				as LNF_STATUS, 
+			[QT LIVRE] 			as LNF_QT_LIVRE, 
+			PRIX 				as LNF_PRIX, 		// PRIX Net
+			MONTANT				as LNF_MONTANT, 
+			CURRENCY 			as LNF_CURRENCY, 
+			//CD 					as LNF_ITNO, 		// erreur nommage du champ lors de la création des photos (qvd) dans l'appli d'extraction 
+			[Prix Vente] 		as LNF_PRIX_VENTE, 	// PRIX de vente
+			UADLDT 				as LNF_UADLDT, 		// Date livraison Prévue
+			UAACDT 				as LNF_UAACDT, 		// Accounting Date
+			UAIVNO 				as LNF_UAIVNO, 		// Numéro Facture
+			UAORTP 				as LNF_UAORTP,		// Type Commande Client
+    	 if( isnull(num( MakeDate(left(UAACDT,4), mid(UAACDT,5,2),Right(UAACDT,2)))), 		// il est possible que la date UAACDT soit à null , donc on ajoute 15 jours à UBRGDT .
+   		num( MakeDate(left(UBRGDT,4), mid(UBRGDT,5,2),Right(UBRGDT,2)))+15,
+   		num( MakeDate(left(UAACDT,4), mid(UAACDT,5,2),Right(UAACDT,2))) 
+   	    )																										as LNF_DATE_UAACDT,		//data maxi
+         num( MakeDate(left(UBRGDT,4), mid(UBRGDT,5,2),Right(UBRGDT,2))) 										as LNF_DATE_UBRGDT,		//date mini,
+        num(makedate(right(left(FileName(),8),4), mid(left(FileName(),8),3,2), left(left(FileName(),8),2) )) 	as DATE_EXTRACT
+		FROM $(file)(qvd)
+		WHERE
+			(DEPOT<899)  
+		and not wildmatch(DEPOT, Applymap('Map_WHLO_V12_M3','010'), Applymap('Map_WHLO_V12_M3','020')) 
+		 			// condition pour gérer les intervalles de date d'entrée et sortie. La dates de la photo doit se trouver entre les 2 dates
+		AND	(	num(makedate(right(left(FileName(),8),4), mid(left(FileName(),8),3,2), left(left(FileName(),8),2) )) 		>=  	
+				num( MakeDate(left(UBRGDT,4), mid(UBRGDT,5,2),Right(UBRGDT,2)))
+			and 
+		  		num(makedate(right(left(FileName(),8),4), mid(left(FileName(),8),3,2), left(left(FileName(),8),2) )) 		<  		
+		  		if	( 	isnull(num( MakeDate(left(UAACDT,4), mid(UAACDT,5,2),Right(UAACDT,2)))), 
+   						num( MakeDate(left(UBRGDT,4), mid(UBRGDT,5,2),Right(UBRGDT,2)))+15,
+   						num( MakeDate(left(UAACDT,4), mid(UAACDT,5,2),Right(UAACDT,2))) 
+   	    			)	
+   	    	) 
+		
+		;
+
+	next file
+
+ 
+LIVRESNONFACTURES_tmp2_M3:
+NoConcatenate
+LOAD * 
+	//,STE & ETABLISSEMENT & Depot & REF & TECHNO & [CLIENT PAYEUR] & BL & DATE_EXTRACT 		as %KEY_LNF 
+	//STE & Depot & REF & DATE_EXTRACT 		as %KEY_LNF_STOCK
+	
+resident LIVRESNONFACTURES_tmp_M3 ;
+
+NoConcatenate
+
+FACT_tmp1_M3:
+LOAD * 
+Resident LIVRESNONFACTURES_tmp2_M3;
+Concatenate 
+load * 
+Resident STOCK_M3;
+
+
+drop table LIVRESNONFACTURES_tmp_M3,LIVRESNONFACTURES_tmp2_M3;
+///$tab M3_PR
+//PR:
+//load *,
+//	'V12' as PR_ORIGINE
+//	resident PR_V12;
+//drop table PR_V12;
+M3_PR:
+LOAD
+	SubField(PRS_Cle,'-',1) &'|'& SubField(PRS_Cle,'-',2) &'|'& num( date(PRS_DateDebut,'DD/MM/YYYY'))&'|'&'M3'			as %KEY_FACT_PR, 
+	PRS_Cle, 
+     PRS_DateDebut, 
+     PRS_PrixRevient, 
+     PRS_Status, 
+     PRS_Manufacturing_Cost, 
+     PRS_Variable_Cost, 
+     PRS_Purchasing_Cost,
+     PRS_Purchasing_Cost_Purchased,
+     'M3_PR_' as PR_ORIGINE,
+     if(PRS_Purchasing_Cost_Purchased = 0 or PRS_Manufacturing_Cost = 0 , 'Unit Price = 0','Unit Price <> 0') as FLAG_PR,
+	//ApplyMap('Map_FACI_M3_V12',SubField(PRS_Cle,'-',1),'NOK FACI V12') 				as F_Etablissement_V12,
+	SubField(PRS_Cle,'-',1)				as PR_F_Etablissement,
+
+	SubField(PRS_Cle,'-',2) 			as PR_temp_UBITNO,
+	 
+    date(PRS_DateDebut,'DD/MM/YYYY') 	as PR_DateFacture
+FROM
+[..\..\..\DataStore\Transform\M3_PR_*.QVD]
+(qvd)
+where date(PRS_DateDebut,'DD/MM/YYYY') > '01/06/2015'
+;
+
+///$tab M3_PMP_PR
+//
+M3_PMP_PR:
+LOAD
+	SubField(PRS_Cle,'-',1) &'|'& SubField(PRS_Cle,'-',2) &'|'& num( date(PRS_DateDebut,'DD/MM/YYYY'))&'|'&'M3'			as %KEY_FACT_PMP_PR, 
+//	PRS_Cle, 
+//     PRS_DateDebut, 
+     PRS_PrixMoyen
+//	SubField(PRS_Cle,'-',1)				as PR_F_Etablissement,
+//
+//	SubField(PRS_Cle,'-',2) 			as PR_temp_UBITNO,
+//	 
+//    date(PRS_DateDebut,'DD/MM/YYYY') 	as PR_DateFacture
+FROM
+[..\..\..\DataStore\Transform\M3_PMP_PR_*.QVD]
+(qvd)
+where date(PRS_DateDebut,'DD/MM/YYYY') > '01/06/2015'
+;
+///$tab M3_FACT
+FACT_tmp2_M3:
+Load *,
+	%FACI as FACI,
+	%FACI as F_Etablissement,
+	//ApplyMap('Map_FACI_M3_V12',%FACI,'NOK WHLO V12')  as F_Etablissement_V12,
+	//Applymap('Map_WHLO_M3_V12',DEPOT ,'NOK_WHLO')	as F_CodeDepot_V12,
+	DEPOT 					as F_CodeDepot
+//,if(%FACI = ApplyMap('MAP_FACI_DEPOT',DEPOT) , %FACI , ApplyMap('MAP_FACI_DEPOT',DEPOT))	as FACI
+
+Resident FACT_tmp1_M3;
+//
+////FACT_M3:
+////load *
+////	//,if(exists(S_STATUT_STOCK),'Existe','Not') 					as TesteExists
+////	//,ITNO &'|'& num(DATE_EXTRACT) 							as %KEY_FACT_PR
+////	,FACI &'|'& ITNO &'|'& num(DATE_EXTRACT) 					as %KEY_FACT_PR
+////	,(ITNO&DATE_EXTRACT) 										as %KET_FACT_MITMAS
+////	,(ITNO& FACI&num(DATE_EXTRACT)) 							as %KEY_FACT_MITFAC
+////	,FACI&'|'&DEPOT&'|'&ITNO&'|'&DATE_EXTRACT 					as %KEY_FACT_MITBAL	// clé vers les demandes annuelles
+////	
+////	//,(LNF_QT_LIVRE+S_QT_STOCK_REEL )*KOCSU1 as ValorisationStock
+////Resident FACT_tmp2_M3;
+//
+///$tab FACT
+//
+//
+//
+TMP_FACT:
+//load 
+//	* ,
+//	'V12' 					as FACT_V12_M3,
+//	F_CodeDepot_V12 		as F_CodeDepot,
+//	F_Etablissement_V12 	as F_Etablissement
+//resident FACT_V12;
+//Concatenate 
+load *,
+	'M3' as FACT_V12_M3
+	//,if(exists(S_STATUT_STOCK),'Existe','Not') 					as TesteExists
+	//,ITNO &'|'& num(DATE_EXTRACT) 							as %KEY_FACT_PR
+	,FACI &'|'& ITNO &'|'& num(DATE_EXTRACT)&'|'&'M3'			as %KEY_FACT_PR
+	,FACI &'|'& ITNO &'|'& num(DATE_EXTRACT)&'|'&'M3'			as %KEY_FACT_PMP_PR
+	,(ITNO&DATE_EXTRACT)&'M3' 									as %KET_FACT_MITMAS
+	,(ITNO& FACI&num(DATE_EXTRACT))&'M3' 						as %KEY_FACT_MITFAC
+	,FACI&'|'&DEPOT&'|'&ITNO&'|'&DATE_EXTRACT&'|'&'M3'  		as %KEY_FACT_MITBAL	// clé vers les demandes annuelles
+	
+	//,(LNF_QT_LIVRE+S_QT_STOCK_REEL )*KOCSU1 as ValorisationStock
+Resident FACT_tmp2_M3;
+
+SET vDepots_PR = '950','150','105','305';
+
+FACT:
+Load *,
+if(WildMatch(F_CodeDepot,$(vDepots_PR)),1,0) as F_Flag_Depot
+resident TMP_FACT;
+
+Drop table TMP_FACT;
+
+///$tab M3_DROP
+//
+drop table FACT_tmp1_M3;
+drop table FACT_tmp2_M3;
+//drop table FACT_V12;
+drop table STOCK_M3;
+//
+//drop Fields F_CodeDepot_V12,F_Etablissement_V12;
+///$tab DIMENSIONS
+///$tab CALENDRIER
+//Quarters:
+//Load 
+//	RowNo() 				as NUM_MONTH,
+//	'Q'& ceil(RowNo()/3) 	as QUARTER
+//	AutoGenerate(12);
+//	
+TEMP_DATE:
+load distinct min(DATE_EXTRACT) as DATE_CAL_MIN,
+max(DATE_EXTRACT) as DATE_CAL_MAX
+Resident FACT
+order by 1,2 ;
+
+Let vMinDate = Num(Makedate(2014,1,1)); 
+//LET vMinDate = Num(peek('DATE_CAL_MIN',0,'TEMP_DATE'));
+LET vMaxDate = Num(peek('DATE_CAL_MAX',-1,'TEMP_DATE'));
+
+
+ChampDate:
+LOAD date($(vMinDate)+IterNo()-1) AS MaDate
+AUTOGENERATE (1) 
+WHILE $(vMinDate)+IterNo()-1<= $(vMaxDate);
+
+
+CALENDRIER:
+LOAD
+	MaDate 									as DATE_EXTRACT,
+	MaDate 									as DimDate,
+	Year(MaDate) 							as Year,
+	'Q' & Num(Ceil(Month(MaDate)/3),00) 	as Quarter,
+	Month(MaDate) 							as Month,
+	//num(Month(DATE_EXTRACT)) 						as NUM_MONTH,
+	Year(MaDate)&Num(Month(MaDate),00) 	as AAAAMM,
+	//Year(DATE_EXTRACT)&Num(Month(DATE_EXTRACT),00) 		as AAAAMM_PRODUCTIVITE,
+	MonthEnd(MaDate)							as MonthEnd,
+	num(Week(MaDate),00) 						as Week,
+	num(Weekday(MaDate),00) 					as Weekday,
+	num(Day(MaDate),00) 						as Day,
+	Weekday(MaDate) 							as DayName,
+month(today())	as Current_Month,
+	month(AddMonths(today(),-1)) as Month_1,
+	month(AddMonths(today(),-2)) as Month_2,
+	month(AddMonths(today(),-3)) as Month_3,
+	date(MaDate,'MMM-YYYY') as MonthYear
+RESIDENT ChampDate;
+
+DROP TABLE ChampDate;
+DROP TABLE TEMP_DATE;
+
+SET vDateRef=DATE_EXTRACT;
+
+LET vSA_FiltreDateYTD 		= '$(vDateRef)={' & chr(39) & '<=$' & '(=monthend(max(DimDate))) >=$' & '(=yearstart(min(DimDate)))' & chr(39) & '}';
+LET vSA_FiltreDateYTD_6M 	= '$(vDateRef)={' & chr(39) & '<=$' & '(=monthend(addmonths(max(DimDate), -6))) >=$' & '(=yearstart(min(DimDate)))' & chr(39) & '}';
+LET vSA_FiltreDateYear_1 	= '$(vDateRef)={' & chr(39) & '<=$' & '(=yearend(addmonths(max(DimDate), -6))) >=$' & '(=yearstart(addmonths(min(DimDate), -6)))' & chr(39) & '}';
+
+//Supprimer les variables vMinDate et vMaxDate
+//SET vMinDate = ;
+//SET vMaxDate = ;
+///$tab Adhoc
+TMP_Dimensions:
+Load * Inline [
+_Code_Dimension	,_Dimension				,_Traduction_Dimension_CODE
+DIM01			,Year					,67
+DIM02			,Month					,68
+DIM03			,SOCIETE				,80
+DIM04			,FACI					,36
+DIM05			,DEPOT					,37
+DIM06			,ITNO					,12
+DIM07			,DATE_EXTRACT			,108
+DIM08			,TYPE					,109
+DIM09			,S_STATUT_STOCK			,83
+
+
+DIM16			,MMITTY					,126
+DIM17			,M9ACRF					,145
+DIM18			,MMCFI4					,147
+DIM19			,PU						,148
+DIM20			,M9VAMT					,149
+DIM21			,F_CodeAcq				,151
+DIM22			,MMSTAT					,95
+
+];
+
+// LNF ADHOC
+//DIM10			,LNF_STATUS				,96
+//DIM11			,LNF_DATE_FACTURE		,107
+//DIM12			,LNF_UBRGDT				,106
+//DIM13			,LNF_BL					,97
+//DIM14			,LNF_OKCUNM				,105
+//DIM15			,LNF_CLIENT_PAYEUR		,104
+
+//Mesures:
+//load * Inline [
+//_CodeMesure		,_Mesure				,_TraductionMesure_FR		,_TraductionMesure_EN		,_TraductionMesure_ES		,_TraductionMesure_TR		,_TraductionMesure_CN
+//AH01			,LNF_MONTANT			,Montant LNF				,Amount DU					,Amount DU					,Amount DU					,Amount DU
+//AH02			,LNF_QT_LIVRE			,QT LNF						,QT DU						,QT DU						,QT DU						,QT DU
+//AH03			,S_QT_STOCK_REEL		,QT Stock Réel				,QT Real Stock				,QT Real Stock				,QT Real Stock				,QT Real Stock
+//AH04			,Valorisation_Stock		,Valorisation des Stocks	,Stock Valuation			,Stock Valuation			,Stock Valuation			,Stock Valuation
+//
+//];
+
+TMP_Mesures:
+load * Inline [
+_Code_Mesure	,_Mesure			,_Traduction_Mesure_CODE
+
+AH03			,S_QT_STOCK_REEL		,88
+AH04			,Valorisation_Stock		,77
+
+];
+
+//// Meseures LNF
+//AH01			,LNF_MONTANT			,91
+//AH02			,LNF_QT_LIVRE			,98
+
+MAP_TRAD_ADHOC_FR:
+Mapping load 	LanguageCode,
+				FR 			as Trad_FR
+Resident %TRADUCTION;
+
+MAP_TRAD_ADHOC_EN:
+Mapping load 	LanguageCode,
+				EN 		as Trad_EN
+Resident %TRADUCTION;
+
+MAP_TRAD_ADHOC_ES:
+Mapping load 	LanguageCode,
+				ES 		as Trad_ES
+Resident %TRADUCTION;
+
+MAP_TRAD_ADHOC_TR:				
+Mapping load 	LanguageCode,
+				TR 		as Trad_TR
+Resident %TRADUCTION;
+
+MAP_TRAD_ADHOC_CN:
+Mapping load 	LanguageCode,
+				CN 		as Trad_CN
+Resident %TRADUCTION;
+
+Dimensions:
+load *
+,ApplyMap('MAP_TRAD_ADHOC_FR',_Traduction_Dimension_CODE) as _Traduction_Dimension_FR
+,ApplyMap('MAP_TRAD_ADHOC_EN',_Traduction_Dimension_CODE) as _Traduction_Dimension_EN
+,ApplyMap('MAP_TRAD_ADHOC_ES',_Traduction_Dimension_CODE) as _Traduction_Dimension_ES
+,ApplyMap('MAP_TRAD_ADHOC_TR',_Traduction_Dimension_CODE) as _Traduction_Dimension_TR
+,ApplyMap('MAP_TRAD_ADHOC_CN',_Traduction_Dimension_CODE) as _Traduction_Dimension_CN
+
+Resident TMP_Dimensions
+order by _Code_Dimension
+;
+
+
+Mesures:
+load *
+,ApplyMap('MAP_TRAD_ADHOC_FR',_Traduction_Mesure_CODE) as _Traduction_Mesure_FR
+,ApplyMap('MAP_TRAD_ADHOC_EN',_Traduction_Mesure_CODE) as _Traduction_Mesure_EN
+,ApplyMap('MAP_TRAD_ADHOC_ES',_Traduction_Mesure_CODE) as _Traduction_Mesure_ES
+,ApplyMap('MAP_TRAD_ADHOC_TR',_Traduction_Mesure_CODE) as _Traduction_Mesure_TR
+,ApplyMap('MAP_TRAD_ADHOC_CN',_Traduction_Mesure_CODE) as _Traduction_Mesure_CN
+
+Resident TMP_Mesures
+order by _Code_Mesure
+;
+Drop Table TMP_Dimensions;
+Drop Table TMP_Mesures;

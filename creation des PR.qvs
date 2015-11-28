@@ -1,0 +1,738 @@
+﻿///$tab Main
+SET ThousandSep=' ';
+SET DecimalSep=',';
+SET MoneyThousandSep=' ';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='# ##0,00 €;-# ##0,00 €';
+SET TimeFormat='hh:mm:ss';
+SET DateFormat='DD/MM/YYYY';
+SET TimestampFormat='DD/MM/YYYY hh:mm:ss[.fff]';
+SET MonthNames='janv.;févr.;mars;avr.;mai;juin;juil.;août;sept.;oct.;nov.;déc.';
+SET DayNames='lun.;mar.;mer.;jeu.;ven.;sam.;dim.';
+
+
+//Variables de répertoires
+SET vFolderDataStore = ..\..\DataStore\;
+SET vFolderReferentials = $(vFolderDataStore)Referentials\PR\;
+SET vFolderTemp=$(vFolderDataStore)Temp\;
+
+SET vEnvironnementSource = Prod;
+SET vEnvironnementSourceM3 = Prod;
+
+SET vFolderExtract = $(vFolderDataStore)Extract\;
+SET vFolderTransform = $(vFolderDataStore)Transform\;
+SET vFolderV12 = $(vFolderExtract)V12\$(vEnvironnementSource)\;
+SET vFolderV12Split = $(vFolderV12)Split\;
+SET vFolderM3 = $(vFolderExtract)M3\$(vEnvironnementSourceM3)\;
+SET vFolderM3Split = $(vFolderM3)Split\;
+//Constantes
+SET vConstPRComingFromExcel=From Excel;
+SET vConstPRComingFromMovex=From Movex;
+
+///$tab Mapping
+Map_FACI_V12_M3:
+Mapping load 
+	V12_DATA as FACI_V12, 
+     M3_DATA as FACI_M3
+FROM
+[$(vFolderTransform)MAPPING_V12_M3.qvd]
+(qvd)
+where FILD = 'FACI'
+;
+
+Map_WHLO_V12_M3:
+Mapping load 
+	V12_DATA as FACI_V12, 
+     M3_DATA as FACI_M3
+FROM
+[$(vFolderTransform)MAPPING_V12_M3.qvd]
+(qvd)
+where FILD = 'WHLO'
+;
+///$tab PR_V12
+//
+////On charge les PR particuliers en provenance d'Excel
+//temp_PRP:
+//LOAD 
+//	'V12' as PRP_V12_M3,
+//     Sté as PRP_CodeSociete, 
+//     [Code Article] as PRP_CodeArticle, 
+//     PRI as PRP_PrixRevient, 
+////     Devise as PRP, 
+//     date([Date début validité],'DD/MM/YYYY') as PRP_DateDebut 
+//FROM
+//[$(vFolderReferentials)REF_PR.xlsx]
+//(ooxml, embedded labels, table is Data);
+//
+////On ajoute le code établissement pour ramener les PRP au niveau établissement au lieu du niveau société
+//LEFT JOIN (temp_PRP)
+//LOAD CFDIVI as PRP_CodeSociete, 
+//     CFFACI as PRP_CodeEtablissement
+//FROM
+//[$(vFolderV12)CFACIL.QVD]
+//(qvd)
+//WHERE
+//	CFFACI = 'BEY'
+//	or CFFACI = 'EFI'
+//	or CFFACI = 'DIS'
+//	or CFFACI = 'US'
+//	or CFFACI = 'UFP'
+//	or CFFACI = 'CHN'
+//;
+//
+//temp_PRP2:
+//LOAD 
+//	*,
+//	PRP_CodeEtablissement&'-'&PRP_CodeArticle as PRP_Cle,
+//	PRP_CodeEtablissement&'-'&PRP_CodeArticle&'-'&num(PRP_DateDebut) as PRP_Cle_Date
+//RESIDENT temp_PRP;
+//
+//DROP TABLE temp_PRP;
+//DROP FIELD PRP_CodeSociete;
+//
+////On charge la globalité des prix standards
+//temp_PRS:
+//LOAD
+//	rowno() as tempPRS_ID, 
+//	KOFACI as PRS_CodeEtablissement,
+//	KOITNO as PRS_CodeArticle,
+//	KOFACI & '-' & KOITNO as PRS_Cle,
+//	date(date#(KOPCDT,'YYYYMMDD'),'DD/MM/YYYY') as PRS_DateDebut, //Date début
+//	KOCSU1 as PRS_PrixRevient 
+//FROM
+//[$(vFolderV12Split)MCHEAD__*.QVD]
+//(qvd)
+//WHERE 
+//	KOPCTP=1
+//	and (KOSTRT='STD' or IsNull(KOSTRT) or trim(KOSTRT)='')
+//	and (
+//		KOFACI = 'BEY'
+//		or KOFACI = 'EFI'
+//		or KOFACI = 'DIS'
+//		or KOFACI = 'US'
+//		or KOFACI = 'UFP'
+//		or KOFACI = 'CHN'
+//	)
+//	//On ne charge pas les PR qui sont définis également dans Excel à la même date
+//	and not exists('PRP_Cle_Date', KOFACI & '-' & KOITNO & '-' & num(date#(KOPCDT,'YYYYMMDD')));
+//
+//rem LEFT JOIN (temp_PRS)
+//LOAD
+//	PRP_Cle as PRS_Cle,
+//	min(PRP_DateDebut) as PRP_DateDebut
+//RESIDENT temp_PRP2
+//GROUP BY PRP_Cle;
+//
+//NoConcatenate
+//temp_PRS2:
+//LOAD
+//	PRS_Cle as PRS_Cle,
+//	PRS_CodeEtablissement,
+//	PRS_CodeArticle,
+//	PRS_DateDebut,
+//	PRS_PrixRevient,
+//	'$(vConstPRComingFromMovex)' as PRS_Status
+//RESIDENT temp_PRS;
+////WHERE isnull(PRP_DateDebut) or PRS_DateDebut <= PRP_DateDebut;
+//
+//concatenate (temp_PRS2)
+//LOAD 
+//	PRP_Cle as PRS_Cle,
+//	PRP_CodeEtablissement as PRS_CodeEtablissement,
+//	PRP_CodeArticle as PRS_CodeArticle,
+//	PRP_DateDebut as PRS_DateDebut,
+//	PRP_PrixRevient as PRS_PrixRevient,
+//	'$(vConstPRComingFromExcel)' as PRS_Status
+//RESIDENT temp_PRP2;
+//
+//DROP TABLE temp_PRS;
+//DROP TABLE temp_PRP2;
+//
+////On stocke une table de controle des PR modifiés
+//STORE temp_PRS2 into Ctrl_PR.txt (txt);
+//
+////On récupère la date minimale de PR en base
+//MinDateDebut:
+//LOAD min(PRS_DateDebut) as MinDateDebut
+//RESIDENT temp_PRS2;
+//
+//LET vMinDate = peek('MinDateDebut',0,'MinDateDebut');
+//
+//DROP TABLE MinDateDebut;
+//
+////On crée la table des PR d'abord avec toutes les dates entre la date min des PR et aujourd'hui
+//temp_Calendar:
+//LOAD 
+//	$(vMinDate) + IterNo() - 1 as Cal_DateDebut
+//AUTOGENERATE 1 WHILE ($(vMinDate) + IterNo() - 1) <= num(today());
+//
+//temp_ListePRSEtabs:
+//LOAD distinct
+//	PRS_CodeEtablissement
+//RESIDENT temp_PRS2
+////WHERE PRS_CodeEtablissement='US'
+//WHERE PRS_CodeEtablissement='DIS'
+////WHERE PRS_CodeEtablissement='EFI'
+////WHERE PRS_CodeEtablissement='CHN'
+////WHERE PRS_CodeEtablissement='BEY'
+//;
+//
+//LET vTotalEtabs = NoOfRows('temp_ListePRSEtabs')-1;
+//
+//FOR e=0 to $(vTotalEtabs)
+//		LET vEtab = peek('PRS_CodeEtablissement', $(e), 'temp_ListePRSEtabs');
+//
+//		temp_ListePRSCles:
+//		LOAD distinct
+//			PRS_Cle
+//		RESIDENT temp_PRS2
+//		WHERE PRS_CodeEtablissement='$(vEtab)';
+//		//WHERE PRS_Cle='CHN-FIH0060S000';
+//		
+//		
+//		LET vTotalLignes = NoOfRows('temp_ListePRSCles')-1;
+//		FOR i=0 to $(vTotalLignes)
+//			LET vCle = peek('PRS_Cle', $(i), 'temp_ListePRSCles');
+//			
+//			TRACE $(i) / $(vTotalLignes);
+//			
+//			NoConcatenate
+//			temp_PRS3:
+//			LOAD 
+//				'$(vCle)' as PRS_Cle,
+//				Cal_DateDebut as PRS_DateDebut
+//			RESIDENT temp_Calendar;
+//		
+//			//On rajoute les données pour les dates pour lesquelles on a des PR renseignés, qu'ils soient standards ou particuliers (XL)
+//			LEFT JOIN (temp_PRS3)
+//			LOAD
+//				PRS_Cle, //Jointure
+//				num(PRS_DateDebut) as PRS_DateDebut, //Jointure
+//				
+//				//PRS_CodeEtablissement,
+//				//PRS_CodeArticle,
+//				PRS_PrixRevient,
+//				PRS_Status
+//			RESIDENT temp_PRS2;
+//		
+//			NoConcatenate
+//			temp_PRS4:
+//			LOAD *
+//			RESIDENT temp_PRS3
+//			ORDER BY PRS_DateDebut;
+//			
+//			DROP TABLE temp_PRS3;
+//		
+//			STORE temp_PRS4 into [$(vFolderTemp)temp_work_PR.qvd] (qvd);
+//			
+//			DROP TABLE temp_PRS4;
+//			
+//			PR:
+//			LOAD @1 as PRS_Cle, 
+//			     @2 as PRS_DateDebut,
+//			     @3 as PRS_PrixRevient,
+//			     @4 as PRS_Status
+//			FROM
+//			[$(vFolderTemp)temp_work_PR.qvd]
+//			(qvd, filters(
+//			Replace(3, top, StrCnd(null)),
+//			Replace(4, top, StrCnd(null))
+//			));
+//			
+//		NEXT;
+//		
+//		store PR into $(vFolderTransform)PR_$(vEtab).QVD;
+//		DROP TABLE PR;
+//NEXT;
+//
+//DROP TABLE temp_Calendar, temp_PRS2, temp_ListePRSCles;
+///$tab PR_M3
+
+//On charge les PR particuliers en provenance d'Excel
+temp_PRP:
+LOAD 
+	'M3' 						as PRP_V12_M3,
+	Sté							as PRP_CodeSociete,                                   
+	[Code Article] 				as PRP_CodeArticle, 
+	PRI                        	as PRP_PrixRevient, 
+	Total_Purchasing_Cost 		as PRP_Purchasing_Cost,
+	Total_Variable_Cost 		as PRP_Variable_Cost,
+	Total_Manufacturing_Cost 	as PRP_Manufacturing_Cost,
+	[R&D],
+	date([Date début validité],'DD/MM/YYYY') as PRP_DateDebut
+    //,Direct_Machine,
+	//Indirect_Labor_Cost, 
+	//Support_Cost, 
+	//SubContracting,
+	//Direct_Labor,
+	//Devise as PRP,
+	//Purchasing_Price as PRP_Purchasing_Cost,
+	//Packaging
+FROM
+[$(vFolderReferentials)REF_PR.xlsx]
+(ooxml, embedded labels, table is Data);
+
+
+//temp_PRP:
+//LOAD 'M3' as PRP_V12_M3,
+//     Sté 			as PRP_CodeSociete, 
+//     [Code Article] as PRP_CodeArticle, 
+//     PRI 			as PRP_PrixRevient, 
+////     Devise as PRP, 
+//     date([Date début validité],'DD/MM/YYYY') as PRP_DateDebut 
+//FROM
+//[$(vFolderReferentials)REF_PR.xlsx]
+//(ooxml, embedded labels, table is Data);
+
+//On ajoute le code établissement pour ramener les PRP au niveau établissement au lieu du niveau société
+LEFT JOIN (temp_PRP)
+
+
+LOAD CFDIVI as PRP_CodeSociete, 
+     CFFACI as PRP_CodeEtablissement
+FROM
+[$(vFolderM3)CFACIL.QVD]
+(qvd)
+WHERE
+		CFFACI = ApplyMap('Map_FACI_V12_M3','BEY')
+	or 	CFFACI = ApplyMap('Map_FACI_V12_M3','EFI')
+	or 	CFFACI = ApplyMap('Map_FACI_V12_M3','DIS')
+	or 	CFFACI = ApplyMap('Map_FACI_V12_M3','US')
+	or 	CFFACI = ApplyMap('Map_FACI_V12_M3','UFP')
+	or 	CFFACI = ApplyMap('Map_FACI_V12_M3','CHN')
+;
+
+temp_PRP2:
+LOAD 
+	*,
+	PRP_CodeEtablissement&'-'&PRP_CodeArticle 	as PRP_Cle,
+	PRP_CodeEtablissement&'-'&PRP_CodeArticle&'-'&num(PRP_DateDebut) 	as PRP_Cle_Date
+RESIDENT temp_PRP;
+
+DROP TABLE temp_PRP;
+DROP FIELD PRP_CodeSociete;
+
+//On charge la globalité des prix standards
+temp_PRS_mchead:
+LOAD
+	rowno() 	as tempPRS_ID, 
+	KOFACI 		as PRS_CodeEtablissement,
+	KOITNO 		as PRS_CodeArticle,
+	KOFACI & '-' & KOITNO 	as PRS_Cle,
+	date(date#(KOPCDT,'YYYYMMDD'),'DD/MM/YYYY') 	as PRS_DateDebut, //Date début
+	KOASU4 as PRS_PrixRevient , // total Cost
+	KOASU3 as PRS_Manufacturing_Cost,
+	KOASU2 as PRS_Variable_Cost,
+	KOASU1 as PRS_Purchasing_Cost,
+	KOCSU1 as PRS_Purchasing_Cost_Purchased
+FROM
+[$(vFolderM3Split)MCHEAD__*.QVD]
+(qvd)
+WHERE 
+	KOPCTP 	= 3 // MAL 31/03/2015 M3 .. il faut rajouter un champ soustotal PR --> tjs en test / Attendre confirmation ERP
+	and (KOSTRT='STD' or IsNull(KOSTRT) or trim(KOSTRT)='')
+	and (
+			KOFACI = ApplyMap('Map_FACI_V12_M3','BEY')
+		or 	KOFACI = ApplyMap('Map_FACI_V12_M3','EFI')
+		or 	KOFACI = ApplyMap('Map_FACI_V12_M3','DIS')
+		or 	KOFACI = ApplyMap('Map_FACI_V12_M3','US')
+		or 	KOFACI = ApplyMap('Map_FACI_V12_M3','UFP')
+		or 	KOFACI = ApplyMap('Map_FACI_V12_M3','CHN')
+	)
+	//On ne charge pas les PR qui sont définis également dans Excel à la même date
+	and not exists('PRP_Cle_Date', KOFACI & '-' & KOITNO & '-' & num(date#(KOPCDT,'YYYYMMDD')));
+
+NoConcatenate
+
+temp_PRS:
+load * Resident temp_PRS_mchead;
+left join 
+temp_PRS_mccoma:
+LOAD  
+     KPFACI as PRS_CodeEtablissement, 
+     KPITNO as PRS_CodeArticle, 
+ 	 KPFACI & '-' & KPITNO 	as PRS_Cle,
+ 	 
+     date(date#(KPPCDT,'YYYYMMDD'),'DD/MM/YYYY') 	as PRS_DateDebut, //Date début
+     KPCA01	as PRS_Detail_KOASU1_Purchasing_Cost, 
+     KPCA02	as PRS_Detail_KOASU1_PackagingCost, 
+     KPCB01	as PRS_Detail_KOASU2_DirectLaborCost, 
+     KPCB03	as PRS_Detail_KOASU3_DirectMarchineCost, 
+     KPCD01	as PRS_Detail_KOASU2_SubContractingCost, 
+     KPCE01 as PRS_Detail_KOASU3_IndirectCost, 
+     KPCE02 as PRS_Detail_KOASU3_SupportCost, 
+     KPCE03 as PRS_Detail_KOASU4_RDCost  
+FROM
+[$(vFolderM3)MCCOMA.QVD]
+(qvd)
+where KPPCTP 	= 3 // MAL 31/03/2015 M3 .. il faut rajouter un champ soustotal PR --> tjs en test / Attendre confirmation ERP
+	and (KPSTRT='STD' or IsNull(KPSTRT) or trim(KPSTRT)='')
+	and (
+			KPFACI = ApplyMap('Map_FACI_V12_M3','BEY')
+		or 	KPFACI = ApplyMap('Map_FACI_V12_M3','EFI')
+		or 	KPFACI = ApplyMap('Map_FACI_V12_M3','DIS')
+		or 	KPFACI = ApplyMap('Map_FACI_V12_M3','US')
+		or 	KPFACI = ApplyMap('Map_FACI_V12_M3','UFP')
+		or 	KPFACI = ApplyMap('Map_FACI_V12_M3','CHN')
+	)
+;
+
+drop table temp_PRS_mchead;
+rem LEFT JOIN (temp_PRS)
+LOAD
+	PRP_Cle as PRS_Cle,
+	min(PRP_DateDebut) as PRP_DateDebut
+RESIDENT temp_PRP2
+GROUP BY PRP_Cle;
+
+NoConcatenate
+temp_PRS2:
+LOAD
+	PRS_Cle 	as PRS_Cle,
+	PRS_CodeEtablissement,
+	PRS_CodeArticle,
+	PRS_DateDebut,
+	PRS_PrixRevient,
+	PRS_Manufacturing_Cost,
+	PRS_Variable_Cost,
+	PRS_Purchasing_Cost,
+	PRS_Purchasing_Cost_Purchased,
+	
+	PRS_Detail_KOASU1_Purchasing_Cost, 
+	PRS_Detail_KOASU1_PackagingCost, 
+	PRS_Detail_KOASU2_DirectLaborCost, 
+	PRS_Detail_KOASU2_SubContractingCost, 
+	PRS_Detail_KOASU3_DirectMarchineCost, 
+	PRS_Detail_KOASU3_IndirectCost, 
+	PRS_Detail_KOASU3_SupportCost, 
+	PRS_Detail_KOASU4_RDCost,
+
+	'$(vConstPRComingFromMovex)' as PRS_Status
+RESIDENT temp_PRS;
+//WHERE isnull(PRP_DateDebut) or PRS_DateDebut <= PRP_DateDebut;
+
+concatenate (temp_PRS2)
+LOAD 
+	PRP_Cle 				as PRS_Cle,
+	PRP_CodeEtablissement 	as PRS_CodeEtablissement,
+	PRP_CodeArticle 		as PRS_CodeArticle,
+	PRP_DateDebut 			as PRS_DateDebut,
+	PRP_PrixRevient 		as PRS_PrixRevient,
+	PRP_Manufacturing_Cost 	as PRS_Manufacturing_Cost,
+	PRP_Purchasing_Cost		as PRS_Purchasing_Cost,
+	PRP_Purchasing_Cost		as PRS_Purchasing_Cost_Purchased,
+	PRP_Variable_Cost		as PRS_Variable_Cost,
+	'$(vConstPRComingFromExcel)' as PRS_Status
+RESIDENT temp_PRP2;
+
+DROP TABLE temp_PRS;
+DROP TABLE temp_PRP2;
+
+//On stocke une table de controle des PR modifiés
+STORE temp_PRS2 into Ctrl_PR.txt (txt);
+
+//On récupère la date minimale de PR en base
+MinDateDebut:
+LOAD min(PRS_DateDebut) as MinDateDebut
+RESIDENT temp_PRS2;
+
+LET vMinDate = peek('MinDateDebut',0,'MinDateDebut');
+
+DROP TABLE MinDateDebut;
+
+//On crée la table des PR d'abord avec toutes les dates entre la date min des PR et aujourd'hui
+temp_Calendar:
+LOAD 
+	$(vMinDate) + IterNo() - 1 as Cal_DateDebut
+AUTOGENERATE 1 WHILE ($(vMinDate) + IterNo() - 1) <= num(today());
+
+temp_ListePRSEtabs:
+LOAD distinct
+	ApplyMap('Map_FACI_V12_M3',PRS_CodeEtablissement) as PRS_CodeEtablissement
+RESIDENT temp_PRS2
+//WHERE PRS_CodeEtablissement='US'
+//WHERE PRS_CodeEtablissement = ApplyMap('Map_FACI_V12_M3','DIS')
+//WHERE PRS_CodeEtablissement='EFI'
+//WHERE PRS_CodeEtablissement='CHN'
+//WHERE PRS_CodeEtablissement='BEY'
+;
+
+LET vTotalEtabs = NoOfRows('temp_ListePRSEtabs')-1;
+
+FOR e=0 to $(vTotalEtabs)
+		LET vEtab = peek('PRS_CodeEtablissement', $(e), 'temp_ListePRSEtabs');
+
+		temp_ListePRSCles:
+		LOAD distinct
+			PRS_Cle
+		RESIDENT temp_PRS2
+		WHERE PRS_CodeEtablissement='$(vEtab)';
+		//WHERE PRS_Cle='CHN-FIH0060S000';
+		
+		
+		LET vTotalLignes = NoOfRows('temp_ListePRSCles')-1;
+		FOR i=0 to $(vTotalLignes)
+			LET vCle = peek('PRS_Cle', $(i), 'temp_ListePRSCles');
+			
+			TRACE $(i) / $(vTotalLignes);
+			
+			NoConcatenate
+			temp_PRS3:
+			LOAD 
+				'$(vCle)' as PRS_Cle,
+				Cal_DateDebut as PRS_DateDebut
+			RESIDENT temp_Calendar;
+		
+			//On rajoute les données pour les dates pour lesquelles on a des PR renseignés, qu'ils soient standards ou particuliers (XL)
+			LEFT JOIN (temp_PRS3)
+			LOAD
+				PRS_Cle, //Jointure
+				num(PRS_DateDebut) as PRS_DateDebut, //Jointure
+				
+				//PRS_CodeEtablissement,
+				//PRS_CodeArticle,
+					PRS_PrixRevient,
+					PRS_Status,
+					PRS_Manufacturing_Cost,
+					PRS_Variable_Cost,
+					PRS_Purchasing_Cost,
+					PRS_Purchasing_Cost_Purchased,
+					PRS_Detail_KOASU1_Purchasing_Cost, 
+					PRS_Detail_KOASU1_PackagingCost, 
+					PRS_Detail_KOASU2_DirectLaborCost, 
+					PRS_Detail_KOASU2_SubContractingCost, 
+					PRS_Detail_KOASU3_DirectMarchineCost, 
+					PRS_Detail_KOASU3_IndirectCost, 
+					PRS_Detail_KOASU3_SupportCost, 
+					PRS_Detail_KOASU4_RDCost
+	
+			RESIDENT temp_PRS2;
+		
+			NoConcatenate
+			temp_PRS4:
+			LOAD *
+			RESIDENT temp_PRS3
+			ORDER BY PRS_DateDebut;
+			
+			DROP TABLE temp_PRS3;
+		
+			STORE temp_PRS4 into [$(vFolderTemp)temp_work_PR.qvd] (qvd);
+			
+			DROP TABLE temp_PRS4;
+			
+			PR:
+			LOAD @1 as PRS_Cle, 
+			     @2 as PRS_DateDebut,
+			     @3 as PRS_PrixRevient,
+			     @4 as PRS_Status,
+			     @5 as PRS_Manufacturing_Cost,
+			     @6 as PRS_Variable_Cost,
+			     @7 as PRS_Purchasing_Cost,
+			     @8 as PRS_Purchasing_Cost_Purchased,
+			     @9 as PRS_Detail_KOASU1_Purchasing_Cost, 
+				 @10 as PRS_Detail_KOASU1_PackagingCost, 
+				 @11 as PRS_Detail_KOASU2_DirectLaborCost, 
+				 @12 as PRS_Detail_KOASU2_SubContractingCost, 
+				 @13 as PRS_Detail_KOASU3_DirectMarchineCost, 
+				 @14 as PRS_Detail_KOASU3_IndirectCost, 
+				 @15 as PRS_Detail_KOASU3_SupportCost, 
+				 @16 as PRS_Detail_KOASU4_RDCost
+			FROM
+			[$(vFolderTemp)temp_work_PR.qvd]
+			(qvd, filters(
+			Replace(3, top, StrCnd(null)),
+			Replace(4, top, StrCnd(null)),
+			Replace(5, top, StrCnd(null)),
+			Replace(6, top, StrCnd(null)),
+			Replace(7, top, StrCnd(null)),
+			Replace(8, top, StrCnd(null)),
+			Replace(9, top, StrCnd(null)),
+			Replace(10, top, StrCnd(null)),
+			Replace(11, top, StrCnd(null)),
+			Replace(12, top, StrCnd(null)),
+			Replace(13, top, StrCnd(null)),
+			Replace(14, top, StrCnd(null)),
+			Replace(15, top, StrCnd(null)),
+			Replace(16, top, StrCnd(null)),
+			
+			
+			));
+				
+		NEXT;
+		
+		store PR into $(vFolderTransform)M3_PR_$(vEtab).QVD;
+		DROP TABLE PR;
+NEXT;
+
+DROP TABLE temp_Calendar,temp_PRS2, temp_ListePRSCles,temp_ListePRSEtabs;
+
+///$tab PR PMP M3
+// Prix Moyen Pondéré 
+
+temp_PRP:
+
+
+//On charge la globalité des prix standards
+temp_PRS_FCAAVP:
+LOAD distinct 
+	//rowno() 	as tempPRS_ID, 
+	A7FACI 		as PRS_CodeEtablissement,
+	A7ITNO 		as PRS_CodeArticle,
+	A7FACI & '-' & A7ITNO 	as PRS_Cle,
+	date(date#(A7RGDT,'YYYYMMDD'),'DD/MM/YYYY') 	as PRS_DateDebut, //Date début
+	A7APPR as PRS_PrixMoyen 
+FROM
+[$(vFolderM3)FCAAVP.QVD]
+(qvd)
+WHERE 
+	 (
+			A7FACI = ApplyMap('Map_FACI_V12_M3','BEY')
+		or 	A7FACI = ApplyMap('Map_FACI_V12_M3','EFI')
+		or 	A7FACI = ApplyMap('Map_FACI_V12_M3','DIS')
+		or 	A7FACI = ApplyMap('Map_FACI_V12_M3','US')
+		or 	A7FACI = ApplyMap('Map_FACI_V12_M3','UFP')
+		or 	A7FACI = ApplyMap('Map_FACI_V12_M3','CHN')
+	)
+	;
+inner join 
+load 
+	M9FACI 		as PRS_CodeEtablissement,
+	M9ITNO 		as PRS_CodeArticle
+from [$(vFolderM3)MITFAC.QVD]
+(qvd)
+WHERE 
+M9VAMT = 2 // article en methode de gestion comptable : 2	=	Prix moyen
+
+;
+
+NoConcatenate
+
+temp_PRS:
+load distinct 
+*,
+rowno() 	as tempPRS_ID
+resident temp_PRS_FCAAVP;
+
+drop table temp_PRS_FCAAVP;
+
+
+
+
+//On stocke une table de controle des PR modifiés
+STORE temp_PRS into Ctrl_PR.txt (txt);
+
+//On récupère la date minimale de PR en base
+MinDateDebut:
+LOAD min(PRS_DateDebut) as MinDateDebut
+RESIDENT temp_PRS;
+
+LET vMinDate = peek('MinDateDebut',0,'MinDateDebut');
+
+DROP TABLE MinDateDebut;
+
+//On crée la table des PR d'abord avec toutes les dates entre la date min des PR et aujourd'hui
+temp_Calendar:
+LOAD 
+	$(vMinDate) + IterNo() - 1 as Cal_DateDebut
+AUTOGENERATE 1 WHILE ($(vMinDate) + IterNo() - 1) <= num(today());
+
+temp_ListePRSEtabs:
+LOAD distinct
+	ApplyMap('Map_FACI_V12_M3',PRS_CodeEtablissement) as PRS_CodeEtablissement
+RESIDENT temp_PRS
+
+;
+
+LET vTotalEtabs = NoOfRows('temp_ListePRSEtabs')-1;
+
+FOR e=0 to $(vTotalEtabs)
+		LET vEtab = peek('PRS_CodeEtablissement', $(e), 'temp_ListePRSEtabs');
+
+		temp_ListePRSCles:
+		LOAD distinct
+			PRS_Cle
+		RESIDENT temp_PRS
+		WHERE PRS_CodeEtablissement='$(vEtab)';
+		//WHERE PRS_Cle='CHN-FIH0060S000';
+		
+		
+		LET vTotalLignes = NoOfRows('temp_ListePRSCles')-1;
+		FOR i=0 to $(vTotalLignes)
+			LET vCle = peek('PRS_Cle', $(i), 'temp_ListePRSCles');
+			
+			TRACE $(i) / $(vTotalLignes);
+			
+			NoConcatenate
+			temp_PRS3:
+			LOAD 
+				'$(vCle)' as PRS_Cle,
+				Cal_DateDebut as PRS_DateDebut
+			RESIDENT temp_Calendar;
+		
+			//On rajoute les données pour les dates pour lesquelles on a des PR renseignés, qu'ils soient standards ou particuliers (XL)
+			LEFT JOIN (temp_PRS3)
+			LOAD
+				PRS_Cle, //Jointure
+				num(PRS_DateDebut) as PRS_DateDebut, //Jointure
+				
+				//PRS_CodeEtablissement,
+				//PRS_CodeArticle,
+					PRS_PrixMoyen
+	
+			RESIDENT temp_PRS;
+		
+			NoConcatenate
+			temp_PRS4:
+			LOAD *
+			RESIDENT temp_PRS3
+			ORDER BY PRS_DateDebut;
+			
+			DROP TABLE temp_PRS3;
+		
+			STORE temp_PRS4 into [$(vFolderTemp)temp_work_PMP_PR.qvd] (qvd);
+			
+			DROP TABLE temp_PRS4;
+			
+			PR_PMP:
+			LOAD @1 as PRS_Cle, 
+			     @2 as PRS_DateDebut,
+			     @3 as PRS_PrixMoyen
+			FROM
+			[$(vFolderTemp)temp_work_PMP_PR.qvd]
+			(qvd, filters(
+			Replace(3, top, StrCnd(null)),
+			Replace(4, top, StrCnd(null)),
+			Replace(5, top, StrCnd(null)),
+			
+			
+			));
+				
+		NEXT;
+		
+		store PR_PMP into $(vFolderTransform)M3_PMP_PR_$(vEtab).QVD;
+		DROP TABLE PR_PMP;
+NEXT;
+
+DROP TABLE temp_Calendar,temp_PRS, temp_ListePRSCles,temp_ListePRSEtabs;
+
+///$tab Main 5
+Directory;
+LOAD *
+FROM
+[..\..\DataStore\Transform\M3_PMP_PR*.QVD]
+(qvd);
+
+
+//LOAD FILD, 
+//     V12_DATA, 
+//     CTTX40, 
+//     NB, 
+//     M3_DATA, 
+//     CTSTKY, 
+//     CTTX401
+//FROM
+//[X:\QlikView\10-Test\DataStore\Transform\MAPPING_V12_M3.qvd]
+//(qvd);
+//
+
+	

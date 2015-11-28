@@ -1,0 +1,268 @@
+﻿///$tab Main
+SET ThousandSep=' ';
+SET DecimalSep=',';
+SET MoneyThousandSep=' ';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='# ##0,00 €;-# ##0,00 €';
+SET TimeFormat='hh:mm:ss';
+SET DateFormat='DD/MM/YYYY';
+SET TimestampFormat='DD/MM/YYYY hh:mm:ss[.fff]';
+SET MonthNames='janv.;févr.;mars;avr.;mai;juin;juil.;août;sept.;oct.;nov.;déc.';
+SET DayNames='lun.;mar.;mer.;jeu.;ven.;sam.;dim.';
+
+
+//Connexion V12 PRD
+//ODBC CONNECT32 TO [V12 PRD] (XUserId is ODOMZSFNTLfA, XPassword is OJOfbSFNTbZB);
+//ODBC CONNECT32 TO [M3 TST] (XUserId is CRUDXSFNTTJB, XPassword is FPSNaSFNTLFB);
+ODBC CONNECT32 TO [M3 PROD] (XUserId is GdAPYRdNHTbeWZFH, XPassword is EIaGLIJKCaUKDbELaKNIFfD);
+//ODBC CONNECT32 TO M3_PPR (XUserId is FHAYUSFNTTcA, XPassword is UKVQSSFNTTEA);
+//ODBC CONNECT32 TO [BEY-SQL-P01_HQZ] (XUserId is PKJJUSROQDdCGLB, XPassword is EUUHPEFOHDdMTcQJ);
+
+//SET vBibliotheque = F0079D7R.MVXCDTA01.;
+SET vRefTablesChamps 		= ..\..\DataStore\Config\*.xlsx;
+SET vQVDFolderV12 			= ..\..\DataStore\Extract\V12\Prod\;
+SET vQVDFolderM3PPR 		= ..\..\DataStore\Extract\M3\PPR\;
+SET vQVDFolderM3TST 		= ..\..\DataStore\Extract\M3\TST\;
+SET vQVDFolderM3PROD 		= ..\..\DataStore\Extract\M3\Prod\;
+SET vQVDFolderSQLP01 		= ..\..\DataStore\Extract\SQL\P01\;
+SET vQVDFolderSQLP03 		= ..\..\DataStore\Extract\SQL\P03\;
+SET vQVDFolderINFOCENTRE	= ..\..\DataStore\Extract\INFOCENTRE\;
+
+SET vQVDFolderSplitV12	 		= $(vQVDFolderV12)Split\;
+SET vQVDFolderSplitM3PPR 		= $(vQVDFolderM3PPR)Split\;
+SET vQVDFolderSplitM3TST 		= $(vQVDFolderM3TST)Split\;
+SET vQVDFolderSplitM3PROD 		= $(vQVDFolderM3PROD)Split\;
+SET vQVDFolderSplitSQLP01 		= $(vQVDFolderSQLP01)Split\;
+SET vQVDFolderSplitSQLP03 		= $(vQVDFolderSQLP03)Split\;
+SET vQVDFolderSplitINFOCENTRE 	= $(vQVDFolderINFOCENTRE)Split\;
+
+//LET No_Row =0;
+ LET vColor1=rgb(1,112,202);
+ LET vColor2=rgb(135,190,47);
+ LET vColor3=rgb(192,0,1);
+ 
+TABLE_MATCHING: // à mettre à jour dans le cas ou on rajoute des nouvelles bibliothèques 
+LOAD * INLINE [
+BIBLIOTHEQUE			,M_PATH						,M_PATH_SPLIT
+M3FDBPPR				,$(vQVDFolderM3PPR)			,$(vQVDFolderSplitM3PPR)
+EFI_Datamart_R2			,$(vQVDFolderSQLP01)		,$(vQVDFolderSplitSQLP01)
+EFI_DWH					,$(vQVDFolderSQLP03)		,$(vQVDFolderSplitSQLP03)
+etpta					,$(vQVDFolderSQLP01)		,$(vQVDFolderSplitSQLP01)
+F0079D7R.EFISPE			,$(vQVDFolderV12)			,$(vQVDFolderSplitV12)
+F0079D7R.MVXCDTA01		,$(vQVDFolderV12)			,$(vQVDFolderSplitV12)
+F0079D7R.MVXCENV		,$(vQVDFolderV12)			,$(vQVDFolderSplitV12)
+M3FDBPRD				,$(vQVDFolderM3PROD)		,$(vQVDFolderSplitM3PROD)	
+EFIFDBPRD				,$(vQVDFolderM3PROD)		,$(vQVDFolderSplitM3PROD)	
+PROJEIS					,$(vQVDFolderINFOCENTRE) 	,$(vQVDFolderSplitINFOCENTRE)
+M3FDBTST				,$(vQVDFolderM3TST)			,$(vQVDFolderSplitM3TST)
+];
+
+Tables_A_Extraire:
+LOAD BIBLIOTHEQUE,
+	 TABLE, 
+     EXPORT,
+     HISTORIQUE_MAX, 
+     HISTORIQUE_MIN, 
+     SPLIT, 
+     CONDITION,
+     RowNo() as RowNo
+FROM
+[$(vRefTablesChamps)]
+(ooxml, embedded labels, table is TABLES)
+where  len(BIBLIOTHEQUE) > 0
+and len(TABLE) > 0
+;
+///$tab Main 2
+
+
+//FOR i = 0 to (NoOfRows('Tables_A_Extraire')-1)
+
+	LET vBibliotheque = peek('BIBLIOTHEQUE', $(No_Row)-1, 'Tables_A_Extraire');
+	LET vTable = peek('TABLE', $(No_Row)-1, 'Tables_A_Extraire');
+	LET vExport = peek('EXPORT', $(No_Row)-1, 'Tables_A_Extraire');
+	LET vSplit = peek('SPLIT', $(No_Row)-1, 'Tables_A_Extraire');
+	LET vCondition = peek('CONDITION', $(No_Row)-1, 'Tables_A_Extraire');	
+	LET vHistoriqueMin = peek('HISTORIQUE_MIN', $(No_Row)-1, 'Tables_A_Extraire');	
+	LET vHistoriqueMax = peek('HISTORIQUE_MAX', $(No_Row)-1, 'Tables_A_Extraire');	
+	LET vLoad = 0;
+	LET vAffTest = 0; // variable utilisée pour afficher ou pas le champ text confirmation rechargement
+	
+	Trace No_Row 			: $(No_Row);
+	Trace vBibliotheque 	: $(vBibliotheque);
+	Trace vTable 			: $(vTable);
+	Trace vExport			: $(vExport);
+	Trace vSplit 			: $(vSplit);
+	Trace vCondition 		: $(vCondition);
+	Trace vHistoriqueMin 	: $(vHistoriqueMin);
+	Trace vHistoriqueMax 	: $(vHistoriqueMax);
+	
+IF(IsNum($(No_Row))) THEN // test de lancement de l'application, si aucune table n'est seleectionnée , la vriable = null 
+
+
+	IF ('$(vExport)'='1' or '$(vExport)'='O' or '$(vExport)'='o') THEN
+	//Si la table est à exporter
+			TRACE Export de la table $(vTable);
+			
+			IF (isnull('$(vSplit)') or trim('$(vSplit)')='') THEN
+			// Si on ne splitte pas la table
+				TRACE Export complet de la table $(vTable);
+
+				//Préparation de la clause SELECT
+				Champs_A_Extraire:
+				LOAD distinct concat(CHAMP, ', ') as CHAMPS
+				FROM
+				[$(vRefTablesChamps)]
+				(ooxml, embedded labels, table is CHAMPS)
+				WHERE TABLE = '$(vTable)';
+				
+				LET vClauseSelect = peek('CHAMPS', -1, 'Champs_A_Extraire');
+				IF ('$(vClauseSelect)'='') THEN
+					SET vClauseSelect=*;
+				ENDIF;
+				DROP TABLE Champs_A_Extraire;
+			
+				//Préparation de la clause WHERE
+				
+				IF (not (isnull('$(vCondition)') or trim('$(vCondition)')='')) THEN
+				//Si la condition est renseignée
+					LET vClauseFrom = 'WHERE '&'$(vCondition)';
+				ELSE
+					LET vClauseFrom = '';
+				ENDIF;
+				
+				
+				$(vTable):
+				SQL SELECT $(vClauseSelect)
+				FROM $(vBibliotheque).$(vTable)
+				$(vClauseFrom);
+				
+				NoConcatenate
+				//Faire un match entre les differentes bibliothèques et le lieu de stockage des QVD correspondant
+				TMP_MATCHING:
+				Load *
+				resident Tables_A_Extraire;
+				inner join
+					load * 
+				resident TABLE_MATCHING
+				WHERE BIBLIOTHEQUE = '$(vBibliotheque)'
+				;
+				
+				
+				LET vM_Path = peek('M_PATH', -1 , 'TMP_MATCHING');
+				
+				TRACE Test PATH :		$(vM_Path);
+				
+				STORE $(vTable) into [$(vM_Path)$(vTable).QVD] (qvd);
+				
+				DROP TABLE $(vTable);
+				DROP TABLE TMP_MATCHING;
+			
+						
+			ELSE
+			// Si on splitte la table
+
+					TRACE Export partiel de la table $(vTable);
+					
+					//Récupération des dates min et max
+					MinMax_TMP:
+					SQL SELECT 
+						min($(vSplit)) AS MINMOIS, 
+						max($(vSplit)) AS MAXMOIS
+					FROM
+					$(vBibliotheque).$(vTable);
+					
+					
+					LET _moisdeb = peek('MINMOIS', -1, 'MinMax_TMP');
+					IF $(vHistoriqueMin) > 0 THEN
+						LET _moisdeb = date(rangemax(date#(peek('MINMOIS', 0, 'MinMax_TMP'), 'YYYYMM'), monthstart(addmonths(today(), -$(vHistoriqueMax)))));
+					ELSE 
+						LET _moisdeb = date(date#(peek('MINMOIS', 0, 'MinMax_TMP'), 'YYYYMM'));
+					ENDIF
+					LET _moisfin = date(date#(peek('MAXMOIS', 0, 'MinMax_TMP'), 'YYYYMM'));
+					
+					DROP TABLE MinMax_TMP;
+				
+					//Préparation de la clause SELECT
+					Champs_A_Extraire:
+					LOAD distinct concat(CHAMP, ', ') as CHAMPS
+					FROM
+					[$(vRefTablesChamps)]
+					(ooxml, embedded labels, table is CHAMPS)
+					WHERE TABLE = '$(vTable)';
+					
+					LET vClauseSelect = peek('CHAMPS', -1, 'Champs_A_Extraire');
+					IF ('$(vClauseSelect)'='') THEN
+						SET vClauseSelect=*;
+					ENDIF;
+					DROP TABLE Champs_A_Extraire;
+				
+					//Préparation de la clause WHERE
+					
+					IF (not (isnull('$(vCondition)') or trim('$(vCondition)')='')) THEN
+					//Si la condition est renseignée
+						LET vClauseFrom = ' and ('&'$(vCondition)'&')';
+					ELSE
+						LET vClauseFrom = '';
+					ENDIF;
+					
+				
+					LET _i = 0;
+		
+					// On boucle sur tous les mois.
+					DO WHILE addmonths(_moisdeb, _i) <= _moisfin
+						//	response = MsgBox(_i);
+					
+						LET _aaaa = year(addmonths('$(_moisdeb)', $(_i)));
+						LET _mm = right('0' & num(month(addmonths('$(_moisdeb)', $(_i)))), 2);
+					
+						IF (FileSize('$(vQVDFolderSplit)$(vTable)__$(_aaaa)$(_mm).QVD')>0 and addmonths(_moisdeb, _i) <= addmonths(_moisfin, -vHistoriqueMin)) THEN
+							TRACE Le mois $(_mm)/$(_aaaa) existe déjà;
+						ELSE
+							TRACE Création du mois $(_mm)/$(_aaaa);
+
+							$(vTable):
+							SELECT $(vClauseSelect)
+							FROM $(vBibliotheque).$(vTable)
+							WHERE $(vSplit) = $(_aaaa)$(_mm) $(vClauseFrom);
+							
+							NoConcatenate
+							//Faire un match entre les differentes bibliothèques et le lieu de stockage des QVD correspondant
+							TMP_MATCHING:
+							Load *
+							resident Tables_A_Extraire;
+							inner join
+								load * 
+							resident TABLE_MATCHING
+							WHERE BIBLIOTHEQUE = '$(vBibliotheque)'
+							;
+				
+				
+							LET vM_PathSplit = peek('M_PATH_SPLIT', -1 , 'TMP_MATCHING');
+				
+							TRACE Test PATH :		$(vM_PathSplit); // afficher l'emplacement de sauvegarde des QVD
+							
+							STORE $(vTable) into [$(vM_PathSplit)$(vTable)__$(_aaaa)$(_mm).QVD] (qvd);
+							
+							// On supprime la table qui est chargée en mémoire.
+							DROP TABLE $(vTable);
+							DROP TABLE TMP_MATCHING; // Suppression de la table TMP de matching entre bibliotheque et qvd folder
+
+						ENDIF;
+						
+				
+						
+						LET _i = _i + 1;
+					LOOP
+						
+			ENDIF;
+	
+	ENDIF;
+ELSE 
+	Trace Test No_Row end;
+ENDIF;
+//	
+//
+////NEXT i;
+
+LET vLoad = 1;
+///$tab Main 3

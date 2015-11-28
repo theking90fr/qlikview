@@ -1,0 +1,3030 @@
+﻿///$tab Main
+Section Access;
+LOAD APPLICATION, 
+     ACCESS, 
+     USERID, 
+     PASSWORD, 
+     NTNAME, 
+     NTDOMAINSID, 
+     GROUPE, 
+     METIER,
+     LANGUAGE
+FROM
+[..\..\..\..\60-Security\SECTION ACCESS - Liste Utilisateurs.xlsx]
+(ooxml, embedded labels, table is USERS)
+Where trim(APPLICATION) = 'TURNOVER'
+;
+Section Application;
+star is *;
+Directory;
+LOAD GROUPE, 
+     SOCIETE as Societe_NomCourt, 
+     ETABLISSEMENT, 
+     DEPOT
+FROM
+[..\..\..\..\60-Security\SECTION ACCESS - Liste Utilisateurs.xlsx]
+(ooxml, embedded labels, table is FILTRES);
+
+
+
+
+SET ThousandSep=' ';
+SET DecimalSep=',';
+SET MoneyThousandSep=' ';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='# ##0,00 €;-# ##0,00 €';
+SET TimeFormat='hh:mm:ss';
+SET DateFormat='DD/MM/YYYY';
+SET TimestampFormat='DD/MM/YYYY hh:mm:ss[.fff]';
+SET MonthNames='Jan.;Feb.;Mar.;Apr.;May;June;Jul.;Aug.;Sep.;Oct.;Nov.;Dec.';
+SET DayNames='lun.;mar.;mer.;jeu.;ven.;sam.;dim.';
+
+//SET HidePrefix = '%';
+
+//Paramétrage de l'application
+//SET vLanguage = FR;
+LET vProfondeurHisto = month(today())+24;
+
+
+//Variables de répertoires
+SET vFolderDataStore = ..\..\..\DataStore\;
+SET vFolderReferentials = $(vFolderDataStore)Referentials\Commercial\;
+SET vFolderReferentialsIT = $(vFolderReferentials)IT\;
+SET vFolderReferentialsUsers = $(vFolderReferentials)Users\;
+
+SET vFolderTemp=$(vFolderDataStore)Temp\;
+SET vFolderTransform=$(vFolderDataStore)Transform\;
+
+SET vEnvironnementSource = Prod;
+SET vEnvironnementSourceM3 = Prod;
+
+SET vFolderExtract = $(vFolderDataStore)Extract\;
+
+SET vFolderV12 = $(vFolderExtract)V12\$(vEnvironnementSource)\;
+SET vFolderV12Split = $(vFolderV12)Split\;
+
+SET vFolderM3 = $(vFolderExtract)M3\$(vEnvironnementSourceM3)\;
+SET vFolderM3Split = $(vFolderM3)Split\;
+
+SET vFolderP03 = $(vFolderExtract)SQL\P03\;
+
+SET vFolderINFOCENTRE = $(vFolderExtract)INFOCENTRE\;
+
+
+//Variables de couleurs
+LET vColorTitle = rgb(229,52,44);
+LET vColorButtonOn = LightGreen();
+LET vColorButtonOff = LightGray();
+LET vColorLabels = rgb(40,136,138);
+
+LET vColorTab1 = rgb(178,223,219);
+LET vColorTab2 = rgb(0,150,136);
+LET vColorRed = rgb(211,47,47);
+LET vColorTotal = rgb(178,223,219);
+
+LET vColorLabelOn = rgb(40,136,138);
+LET vColorLabelOff = lightGray();
+
+//Variables de menus
+LET vActiveMenu = 1;
+
+// Recuperer le choix de la langue par utilisetaur 
+//SECURITY_LANGUAGE:
+//LOAD 
+//     LANGUAGE,
+//     lower(NTNAME) as USERNAME
+//FROM
+//[..\..\..\..\60-Security\SECTION ACCESS - Liste Utilisateurs.xlsx]
+//(ooxml, embedded labels, table is USERS)
+//where trim(APPLICATION) = 'TURNOVER' and trim(NTNAME) <> '*'
+////and lower(trim(NTNAME)) = lower(subfield(OSUser(),'\',2))
+//;
+
+
+//Chargement des libellés dans les différentes langues
+%TRADUCTION:
+LOAD Code as LanguageCode, 
+     FR, 
+     EN, 
+     ES, 
+     TR, 
+     CN
+FROM
+[$(vFolderReferentialsIT)REF_Language.xlsx]
+(ooxml, embedded labels, table is CA);
+
+//LET vLanguage = peek('LANGUAGE',0,'SECURITY_LANGUAGE');
+
+SET vLanguage = EN;
+LET vFuncTrad = 'minstring({<LanguageCode = {$1}>} '&'$'&'(vLanguage)'&')';
+
+SET vDevise=GROUPE;
+SET vLibExternalSales=External sales;
+SET vLibInternalSales=Internal sales;
+
+DIM_UNITES:
+LOAD * INLINE [
+	%DimUnite, %DimUniteFacteur
+	Units, 1
+	KUnits, 1000
+	MUnits, 1000000
+];
+
+
+AIDE:
+LOAD * INLINE [
+ANNEE_AIDE,	AIDE
+1990,	Libération de Nelson MANDELA
+2008,	B.OBAMA devient président des Etats unis
+1998,	La France gagne la coupe du monde de Football
+1985,	Création des restos du cœur
+2010,	Stephane Guillon est remercié par France Inter
+2011,	Révolution arabe
+2011,	Mariage princier en Angleterre
+1986,	Prince chante 'Kiss'
+
+];
+///$tab Versionning
+
+%VERSION:
+LOAD * INLINE [
+%Version_No, %Version_Desc, %Version_Qui
+'0.01', Version initiale, Maaven
+'0.02', Modification Comptes, MAL
+'0.03', Ajouter les Totaux PR et détails, MAL
+];
+///$tab V12
+///$tab Mapping
+
+//CustGroup_KA:
+//LOAD 
+//	CustGroup, 
+//    Keyacct
+//FROM
+//[$(vFolderReferentialsUsers)REF_KA.xlsx]
+//(ooxml, embedded labels, table is Data);
+
+Map_CustGroup_KA:
+MAPPING LOAD 
+	CustGroup, 
+    Keyacct
+FROM
+[$(vFolderReferentialsUsers)REF_KA.xlsx]
+(ooxml, embedded labels, table is Data);
+
+Map_Cust_Interco:
+MAPPING LOAD 
+     [Cust code (payer)], 
+     if (Interco=1, '$(vLibInternalSales)', '$(vLibExternalSales)') as Interco
+FROM
+[$(vFolderReferentialsUsers)REF_Interco.xlsx]
+(ooxml, embedded labels, header is 1 lines, table is Data)
+WHERE Company <> '001';
+
+Map_Article_Techno:
+MAPPING LOAD 
+    MMITNO, 
+	MMHIE1
+FROM
+[$(vFolderV12)MITMAS.QVD]
+(qvd);
+
+Map_Societe_Zone:
+MAPPING LOAD 
+	Société, 
+    Zone
+FROM
+[$(vFolderReferentialsIT)REF_Zones.xlsx]
+(ooxml, embedded labels, table is Data);
+
+Map_Societe_Pays:
+MAPPING LOAD 
+	Société, 
+    Pays
+FROM
+[$(vFolderReferentialsIT)REF_Zones.xlsx]
+(ooxml, embedded labels, table is Data);
+
+Map_Societe_DeviseZone:
+MAPPING LOAD 
+	Société, 
+  	Devise 	as DeviseZone
+FROM
+[$(vFolderReferentialsIT)REF_Zones.xlsx]
+(ooxml, embedded labels, table is Data);
+
+
+Map_Societe_Nom:
+MAPPING LOAD 
+	Société, 
+    NomSociété
+FROM
+[$(vFolderReferentialsIT)REF_Zones.xlsx]
+(ooxml, embedded labels, table is Data);
+
+
+Map_Cust_CustGroup:
+MAPPING LOAD 
+	Cy&'-'&[Cust code (Payer)], 
+    [Cust Group]
+FROM
+[$(vFolderReferentialsUsers)REF_CustGroup.xlsx]
+(ooxml, embedded labels, header is 1 lines, table is Data);
+
+//Cust_CustGroup_EFI:
+//LOAD 
+//	//OKCUNO 	as %Client_ID, 				// MAL 03/03/15
+//	OKCUNO 	as MAP_ClientPayeur_ID,
+//	OKCUCL	as MAP_ClientPayeur_GroupeClient
+//	//OKCUCL	as Client_GroupeClient // MAL 03/03/15
+//FROM
+//[$(vFolderV12)OCUSMA.QVD]
+//(qvd)
+//;
+
+Map_Cust_CustGroup_EFI:
+MAPPING LOAD 
+	//OKCUNO 	as %Client_ID, 				// MAL 03/03/15
+	OKCUNO 	as %ClientPayeur_ID,
+	OKCUCL	as ClientPayeur_GroupeClient
+	//OKCUCL	as Client_GroupeClient // MAL 03/03/15
+FROM
+[$(vFolderV12)OCUSMA.QVD]
+(qvd)
+;
+
+Map_Cust_Livre_Payeur:
+Mapping	LOAD
+	OKCUNO 	as MAP_CLEINT_LIVRE,
+	OKPYNO	as MAP_CLIENT_PAYEUR
+
+FROM
+[$(vFolderV12)OCUSMA.QVD]
+(qvd)
+;
+
+Map_Agent_Planning: // ramener agent planning
+Mapping LOAD 
+     MBWHLO&'-'&MBITNO as MAP_WHLO_ITNO ,
+     MBRESP as Agent_Planning
+FROM
+[$(vFolderV12)MITBAL.QVD]
+(qvd);
+
+
+Map_FACI_V12_M3:
+Mapping load 
+	V12_DATA as FACI_V12, 
+     M3_DATA as FACI_M3
+FROM
+[$(vFolderTransform)MAPPING_V12_M3.qvd]
+(qvd)
+where FILD = 'FACI'
+;
+
+Map_WHLO_V12_M3:
+Mapping load 
+	V12_DATA as WHLO_V12, 
+     M3_DATA as WHLO_M3
+FROM
+[$(vFolderTransform)MAPPING_V12_M3.qvd]
+(qvd)
+where FILD = 'WHLO'
+;
+
+
+MAP_WHLO_FACI_V12:
+Mapping load 
+	MWWHLO,
+	MWFACI
+from [$(vFolderV12)MITWHL.QVD] (qvd);
+
+
+
+
+
+
+///$tab Dimensions
+FACI_V12_M3:
+load 
+	V12_DATA as F_Etablissement_V12, 
+     M3_DATA as F_Etablissement_M3
+FROM
+[$(vFolderTransform)MAPPING_V12_M3.qvd]
+(qvd)
+where FILD = 'FACI'
+;
+
+WHLO_V12_M3:
+load 
+	V12_DATA as F_CodeDepot_V12, 
+     M3_DATA as F_CodeDepot_M3
+FROM
+[$(vFolderTransform)MAPPING_V12_M3.qvd]
+(qvd)
+where FILD = 'WHLO';
+
+
+ARTICLE:
+LOAD
+	AutoNumberHash128(Article_Code)&SRC_TYPE as #KET_FAITS_ARTICLES,
+	//SRC_TYPE, 
+     Article_Code, 
+     Article_ObjetCtrlCompte, 
+     Article_GroupeTechno, 
+     Article_Techno, 
+     Article_Ligne_Production, 
+     Article_Code_Projet, // SALES RANGE
+     Article_Rech_1eMonte, 
+     Article_GroupeProduit, 
+     Article_Description, 
+     Article_GroupeArticle, 
+     Article_Type, 
+     Article_UniteBase,
+     Article_UniteCommande,
+	 Article_Code_Acq,
+	  Article_Statut
+//     Article_ManufLine
+FROM
+[$(vFolderTransform)TRANSFORM__DIMENSION_ARTICLE.qvd]
+(qvd)
+where trim(Article_Description) <> '1 CARTON'
+//and len(trim(Article_Code)) > 9 // enlever les ref qui ne sont pas utilis et qui ont une longueur < 11
+;
+
+
+MAP_ArticleCodeAcq:
+MAPPING LOAD
+     Article_Code, 
+	 Article_Code_Acq
+RESIDENT ARTICLE;
+
+
+
+
+SOCIETE:
+LOAD %Societe_ID, 
+     Societe_Nom, 
+     Societe_Code, 
+     Societe_Ordre, 
+     Societe_Devise, 
+     Societe_NomCourt
+FROM
+[$(vFolderTransform)TRANSFORM__DIMENSION_SOCIETE.qvd]
+(qvd);
+
+
+DAS:
+LOAD TRIM(TECHNO) as F_CodeTechno, 
+     DAS_FR,
+     DAS_EN,
+     DAS_ES,
+     DAS_TR,
+     DAS_CN
+FROM
+[$(vFolderReferentialsUsers)REF_DAS.xlsx]
+(ooxml, embedded labels, table is Data);
+
+
+
+///$tab Clients
+CLIENTLIVRE:
+LOAD
+	 %ClientLivre_ID&SRC_TYPE as #KEY_FAITS_CLIENT, 
+	//SRC_TYPE, 
+     //%Client_ID, 
+     //%ClientLivre_ID, 
+     ClientLivre_Code, 
+     ClientLivre_GroupeClient, 
+     ClientLivre_KeyAccount, 
+     ClientLivre_Nom, 
+     ClientLivre_CodeMarche, 
+     ClientLivre_CtrObjComptable, 
+     [Pays client]
+FROM
+[$(vFolderTransform)TRANSFORM__DIMENSION_CLIENTLIVRE.qvd]
+(qvd);
+
+CLIENTPAYEUR:
+LOAD %ClientPayeur_ID&SRC_TYPE as #KEY_FAITS_CLIENT,
+	//SRC_TYPE, 
+     //%Client_ID, 
+     //%ClientPayeur_ID, 
+     ClientPayeur_Code, 
+     ClientPayeur_GroupeClient, 
+     ClientPayeur_KeyAccount, 
+     ClientPayeur_Nom, 
+     ClientPayeur_CodeMarche, 
+     ClientPayeur_CodeCommercial, 
+     ClientPayeur_CtrObjComptable, 
+     ClientPayeur_Type, 
+     OKSDST
+FROM
+[$(vFolderTransform)TRANSFORM__DIMENSION_CLIENTPAYEUR.qvd]
+(qvd);
+
+///$tab Devises
+
+//Devises de consolidation
+		temp_DevisesConso:
+		LOAD 
+			month(Date) as DC_Month, 
+			year(Date) 	as DC_Year, 
+			From_Curr 	as DC_FromCurr, 
+			To_Curr 	as DC_ToCurr, 
+			Rate 		as DC_Rate
+		FROM
+		[$(vFolderReferentialsUsers)REF_Devises_Conso.xlsx]
+		(ooxml, embedded labels, header is 1 lines, table is Data);
+		
+		//Par date, on récupère la liste des devises concernées (en From ou en To) pour créer les taux à 1.
+		temp_isoDevises:
+		LOAD Distinct
+			DC_Month,
+			DC_Year,
+			DC_FromCurr as DC_Curr
+		RESIDENT temp_DevisesConso;
+		Concatenate(temp_isoDevises)
+		LOAD Distinct
+			DC_Month,
+			DC_Year,
+			DC_ToCurr as DC_Curr
+		RESIDENT temp_DevisesConso;
+		
+		
+		Concatenate(temp_DevisesConso)
+		LOAD Distinct
+			DC_Month,
+			DC_Year,
+			DC_Curr as DC_FromCurr,
+			DC_Curr as DC_ToCurr,
+			1 as DC_Rate
+		RESIDENT temp_isoDevises;
+		
+		DROP TABLE temp_isoDevises;
+		
+		temp_MinDate:
+		LOAD
+			min(makedate(DC_Year,DC_Month)) as minDate
+		RESIDENT temp_DevisesConso;
+		
+		LET vMinDate = num(peek('minDate',0,'temp_MinDate'));
+		DROP TABLE temp_MinDate;
+		
+		Devises_Conso:
+		LOAD 
+			date($(vMinDate) + IterNo() - 1) 	as DC_Date,
+			month($(vMinDate) + IterNo() - 1) 	as DC_Month,
+			year($(vMinDate) + IterNo() - 1) 	as DC_Year
+		AUTOGENERATE 1 WHILE ($(vMinDate) + IterNo() - 1) <= num(today());
+		
+		LEFT JOIN (Devises_Conso)
+		LOAD *
+		RESIDENT temp_DevisesConso;
+		
+		DROP TABLE temp_DevisesConso;
+		
+//Devises de budget
+		Devises_Budget:
+		LOAD Year 		as DB_Year, 
+		     From_Curr 	as DB_FromCurr, 
+		     To_Curr 	as DB_ToCurr, 
+		     Rate 		as DB_Rate
+		FROM
+		[$(vFolderReferentialsUsers)REF_Devises_Budget.xlsx]
+		(ooxml, embedded labels, header is 1 lines, table is Data);
+
+
+		
+		//Par date, on récupère la liste des devises concernées (en From ou en To) pour créer les taux à 1.
+		temp_isoDevises:
+		LOAD Distinct
+			DB_Year,
+			DB_FromCurr as DB_Curr
+		RESIDENT Devises_Budget;
+		Concatenate(temp_isoDevises)
+		LOAD Distinct
+			DB_Year,
+			DB_ToCurr as DB_Curr
+		RESIDENT Devises_Budget;
+		
+		
+		Concatenate(Devises_Budget)
+		LOAD Distinct
+			DB_Year,
+			DB_Curr as DB_FromCurr,
+			DB_Curr as DB_ToCurr,
+			1 as DB_Rate
+		RESIDENT temp_isoDevises
+		WHERE not isnull(DB_Year);
+		
+		DROP TABLE temp_isoDevises;
+///$tab Budget Montant
+// CHARGEMENT DES BUGETS MONTANT
+temp_Budget_Montant:
+CrossTable(Mois, [Montant_Budget], 15)
+LOAD 
+	
+	 Year 		as Year_Budget,     
+     Affiliate 	as F_CodeSociete, 
+     OEM, 
+     Cust.Desc., 
+     (Cust.Ref.) as temp_%ClientPayeur_ID,
+     
+     DAS as BUDGET_DAS, 
+     Techno as F_CodeTechno, 
+     ([EFI Part Ref.]) as  ITNO,
+     
+     [EFC Part Desc.], 
+     Unit, 
+     (Warehouse) as BUDGET_CodeDepot, 
+     Secured, 
+     SOP, 
+     Currency, 
+     [Redesign 2014],
+
+     [Ventes 01], 
+     [Ventes 02], 
+     [Ventes 03], 
+     [Ventes 04], 
+     [Ventes 05], 
+     [Ventes 06], 
+     [Ventes 07], 
+     [Ventes 08], 
+     [Ventes 09], 
+     [Ventes 10], 
+     [Ventes 11], 
+     [Ventes 12]
+FROM
+[$(vFolderReferentialsUsers)Budget\Budget 20*.xlsx]
+(ooxml, embedded labels, header is 1 lines, table is BdD);
+
+
+
+///$tab Budget Volume
+// CHARGEMENT DES BUGETS MONTANT
+temp_Budget_Volume:
+CrossTable(Mois, [Volume_Budget], 15)
+LOAD 
+	 Year 		as Year_Budget,     
+     Affiliate 	as F_CodeSociete, 
+     OEM, 
+     Cust.Desc., 
+     (Cust.Ref.) as temp_%ClientPayeur_ID, 
+     
+     
+     DAS as BUDGET_DAS, 
+     Techno as F_CodeTechno, 
+     ([EFI Part Ref.]) as  ITNO, 
+     [EFC Part Desc.], 
+     Unit, 
+     (Warehouse) as BUDGET_CodeDepot, 
+     Secured, 
+     SOP, 
+     Currency, 
+     [Redesign 2014],
+ 
+     [Volume 01], 
+     [Volume 02], 
+     [Volume 03], 
+     [Volume 04], 
+     [Volume 05], 
+     [Volume 06], 
+     [Volume 07], 
+     [Volume 08], 
+     [Volume 09], 
+     [Volume 10], 
+     [Volume 11], 
+     [Volume 12]
+FROM
+[$(vFolderReferentialsUsers)Budget\Budget 20*.xlsx]
+(ooxml, embedded labels, header is 1 lines, table is BdD);
+
+
+///$tab M3_Mapping
+
+//CustGroup_KA:
+//LOAD 
+//	CustGroup, 
+//    Keyacct
+//FROM
+//[$(vFolderReferentialsUsers)REF_KA.xlsx]
+//(ooxml, embedded labels, table is Data);
+
+Map_CustGroup_KA:
+MAPPING LOAD 
+	CustGroup, 
+    Keyacct
+FROM
+[$(vFolderReferentialsUsers)REF_KA.xlsx]
+(ooxml, embedded labels, table is Data);
+
+Map_Cust_Interco:
+MAPPING LOAD 
+     [Cust code (payer)], 
+     if (Interco=1, '$(vLibInternalSales)', '$(vLibExternalSales)') as Interco
+FROM
+[$(vFolderReferentialsUsers)REF_Interco.xlsx]
+(ooxml, embedded labels, header is 1 lines, table is Data)
+WHERE Company <> '001';
+
+Map_Article_Techno_M3:
+MAPPING LOAD 
+    MMITNO, 
+	MMITCL
+FROM
+[$(vFolderM3)MITMAS.QVD]
+(qvd);
+
+//Map_Societe_Zone:
+//MAPPING LOAD 
+//	Société, 
+//    Zone
+//FROM
+//[$(vFolderReferentialsIT)REF_Zones.xlsx]
+//(ooxml, embedded labels, table is Data);
+//
+//Map_Societe_Pays:
+//MAPPING LOAD 
+//	Société, 
+//    Pays
+//FROM
+//[$(vFolderReferentialsIT)REF_Zones.xlsx]
+//(ooxml, embedded labels, table is Data);
+//
+//Map_Societe_DeviseZone:
+//MAPPING LOAD 
+//	Société, 
+//  	Devise 	as DeviseZone
+//FROM
+//[$(vFolderReferentialsIT)REF_Zones.xlsx]
+//(ooxml, embedded labels, table is Data);
+//
+//
+//Map_Societe_Nom:
+//MAPPING LOAD 
+//	Société, 
+//    NomSociété
+//FROM
+//[$(vFolderReferentialsIT)REF_Zones.xlsx]
+//(ooxml, embedded labels, table is Data);
+//
+//
+//Map_Cust_CustGroup:
+//MAPPING LOAD 
+//	Cy&'-'&[Cust code (Payer)], 
+//    [Cust Group]
+//FROM
+//[$(vFolderReferentialsUsers)REF_CustGroup.xlsx]
+//(ooxml, embedded labels, header is 1 lines, table is Data);
+
+///////////////////////////////////////////////////////////////////////////////
+// Ramener le groupe client USA via ocusma et csytab
+// MAL 30/03/2015 
+
+tmp_Cust_CustGroup_M3:
+load distinct
+	OKCUNO 	as CUNO,
+	OKCUCL 	as CUCL,
+	OKCSCD	as CSCD
+from [$(vFolderM3)OCUSMA.QVD]
+(qvd)
+//where OKCSCD = 'USA'
+;
+join
+CYSTAB:
+load distinct 
+	CTSTKY 	as CUCL,
+	CTTX40	as LB_CUCL
+from [$(vFolderM3)CSYTAB.QVD]
+(qvd)
+where CTSTCO  = 'CUCL'
+;
+
+Map_Cust_CD_CustGroup_M3:
+MAPPING LOAD 
+    CUNO,
+    CUCL
+resident tmp_Cust_CustGroup_M3 ;
+
+Map_Cust_LB_CustGroup_M3:
+MAPPING LOAD 
+    CUCL,
+    LB_CUCL
+resident tmp_Cust_CustGroup_M3 ;
+
+//drop table tmp_Cust_CustGroup_M3;
+//////////////////////////////////////////////////////////////////////////////
+
+//Cust_CustGroup_EFI:
+//LOAD 
+//	//OKCUNO 	as %Client_ID, 				// MAL 03/03/15
+//	OKCUNO 	as MAP_ClientPayeur_ID,
+//	OKCUCL	as MAP_ClientPayeur_GroupeClient
+//	//OKCUCL	as Client_GroupeClient // MAL 03/03/15
+//FROM
+//[$(vFolderV12)OCUSMA.QVD]
+//(qvd)
+//;
+
+Map_Cust_CustGroup_M3:
+MAPPING LOAD 
+	//OKCUNO 	as %Client_ID, 				// MAL 03/03/15
+	OKCUNO 	as %ClientPayeur_ID,
+	OKCUCL	as ClientPayeur_GroupeClient
+	//OKCUCL	as Client_GroupeClient // MAL 03/03/15
+FROM
+[$(vFolderM3)OCUSMA.QVD]
+(qvd)
+;
+
+Map_Cust_Livre_Payeur_M3:
+Mapping	LOAD
+	OKCUNO 	as MAP_CLEINT_LIVRE,
+	OKPYNO	as MAP_CLIENT_PAYEUR
+
+FROM
+[$(vFolderM3)OCUSMA.QVD]
+(qvd)
+;
+
+Map_Agent_Planning_M3: // ramener agent planning
+Mapping LOAD 
+     MBWHLO&'-'&MBITNO as MAP_WHLO_ITNO ,
+     MBRESP as Agent_Planning
+FROM
+[$(vFolderM3)MITBAL.QVD]
+(qvd);
+
+Map_FACI_V12_M3:
+Mapping load 
+	V12_DATA as FACI_V12, 
+     M3_DATA as FACI_M3
+FROM
+[$(vFolderTransform)MAPPING_V12_M3.qvd]
+(qvd)
+where FILD = 'FACI'
+;
+
+
+
+
+
+
+Map_FACI_WHLO_M3:
+Mapping load 
+	if(FILD = 'FACI',M3_DATA )	as FACI_M3, 
+     if(FILD = 'WHLO',M3_DATA )	as WHLO_M3
+FROM
+[$(vFolderTransform)MAPPING_V12_M3.qvd]
+(qvd)
+//where FILD = 'WHLO'
+;
+
+
+Map_WHLO_FACI_M3:
+Mapping load 
+     if(FILD = 'WHLO',M3_DATA )	as WHLO_M3,
+	if(FILD = 'FACI',M3_DATA )	as FACI_M3
+
+FROM
+[$(vFolderTransform)MAPPING_V12_M3.qvd]
+(qvd)
+//where FILD = 'WHLO'
+;
+
+//////// MAPPING  M3 VERS V12
+Map_FACI_M3_V12:
+Mapping load 
+	text(M3_DATA) 	as FACI_M3,
+	V12_DATA 	as FACI_V12 
+     
+FROM
+[$(vFolderTransform)MAPPING_V12_M3.qvd]
+(qvd)
+where FILD = 'FACI'
+;
+
+Map_WHLO_V12_M3:
+Mapping load 
+	V12_DATA as WHLO_V12, 
+     M3_DATA as WHLO_M3
+FROM
+[$(vFolderTransform)MAPPING_V12_M3.qvd]
+(qvd)
+where FILD = 'WHLO'
+;
+
+Map_WHLO_M3_V12:
+Mapping load 
+	M3_DATA 	as WHLO_M3,
+	V12_DATA 	as WHLO_V12 
+    
+FROM
+[$(vFolderTransform)MAPPING_V12_M3.qvd]
+(qvd)
+where FILD = 'WHLO'
+;
+
+
+MAP_WHLO_FACI_M3:
+Mapping load 
+	MWWHLO,
+	MWFACI
+from [$(vFolderM3)MITWHL.QVD] (qvd);
+
+
+
+MAP_CodeAcq:
+LOAD  
+     MBITNO&MBWHLO, 
+     MBPUIT as CodeAcq
+    
+FROM
+[$(vFolderM3)MITBAL.QVD]
+(qvd)
+where MBCONO = 200
+;
+///$tab Factures
+
+LET vFileList = '$(vFolderV12Split)'&'OINACC*.QVD';
+//Pour chaque split mensuel du fichier OINACC
+FOR Each File in filelist (vFileList)
+	
+	//On ne charge qu'à partir de 2014, les données Réel 2013 viennent d'un fichier Excel
+	IF num#(left(right('$(File)',10),4))>=2014 THEN
+
+		TEMP_FACTURES2:
+		LOAD
+			'V12' 	as F_V12_M3,
+			'FV12_'&rowno()			as F_id, 
+			UTCONO			as F_CodeGroupe, 		//Jointure
+			UTDIVI			as F_CodeSociete, 		//Jointure
+			UTYEA4			as F_AnneeComptable, 	//Jointure
+			UTCINO			as F_NumFacture, 		//Jointure
+			UTORNO			as F_NumCommande, 		//Jointure
+			UTDLIX			as F_IndexLivraison, 	//Jointure
+			num(LEFT(text(UTIVRF),3)) 	as F_NumLigneCommande, //Jointure
+
+			'Facture' 		as F_Type,
+			UTDIVI			as %Societe_ID, 		//Jointure
+			-UTACAM			as F_Montant_SOC, 		//Devise filiale 
+			date(date#(UTACDT,'YYYYMMDD'))					as F_DateComptable,
+			ApplyMap('Map_Societe_Zone',UTDIVI,'NA')		as F_Zone, 
+			ApplyMap('Map_Societe_Pays',UTDIVI,'NA')		as F_Pays, 
+			ApplyMap('Map_Societe_DeviseZone',UTDIVI,'NA')	as F_DeviseZone, 
+			'EUR'			as F_DeviseGroupe, 
+			UTACQT			as F_Quantite1, 
+			UTAIT1			as F_CodeComptable, 
+			UTAIT2			as F_SectionAnalytique, 	//Cost center 
+			UTAIT3			as temp_UTAIT3, 
+			if (UTDIVI='001',
+				if(UTAIT6='HG000' or UTAIT6='GR505',
+					'$(vLibExternalSales)',
+					'$(vLibInternalSales)'
+				),
+				ApplyMap('Map_Cust_Interco', UTPYNO, '$(vLibExternalSales)')
+			)
+							as F_FlagInterco, 
+			UTARAT			as F_TauxChangeClientCompta, 
+			-UTCUAM			as F_Montant_CLI, 	//facturé, devise client 
+			UTCUCD			as F_DeviseFacture, 
+			UTCUCL			as F_GroupeClient_ART, 	//Vient de la fiche client
+
+			/***********************************************
+			21/09/2015
+			Groupe Client et Key Account ramenés directement depuis M3 pour la Société 003, V12 pour 001 et excel pour le reste!
+			************************************************/
+			if (UTDIVI='001',
+						ApplyMap('Map_Cust_CustGroup_EFI',UTPYNO, 'N/A'),
+		if	(UTDIVI='003',
+						ApplyMap('Map_Cust_CD_CustGroup_M3',UTPYNO, 'N/A') ,
+						ApplyMap('Map_Cust_CustGroup',UTDIVI&'-'&UTPYNO, 'N/A')))
+		
+				 	as F_GroupeClient,  
+
+			if (UTDIVI='001',
+									ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_EFI',UTPYNO, 'N/A'), 'N/A'),
+			if (UTDIVI='003',
+									ApplyMap('Map_Cust_LB_CustGroup_M3',ApplyMap('Map_Cust_CD_CustGroup_M3',UTPYNO, 'N/A'), 'N/A'),
+									ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup',UTDIVI&'-'&UTPYNO, 'N/A'), 'N/A')))
+		
+				 	as F_ClientPayeur_KeyAccount, 
+			/************************************************/
+
+			text(UTCUNO)	as %ClientLivre_ID, 
+			UTIVDT,
+			date(date#(UTIVDT,'YYYYMMDD'),'DD/MM/YYYY')
+							as F_DateFacture, 
+			UTIVRF			as F_RefLigneCommande, 
+			
+			text(UTPYNO)	as FV12_%ClientPayeur_ID,  
+			UTWHLO as F_CodeDepot_V12
+			//Applymap('Map_WHLO_V12_M3',UTWHLO,'NOK_DEPOT')			as F_CodeDepot
+		FROM
+		[$(File)]
+		(qvd)
+		WHERE 
+			(
+				text(UTDIVI) = '001'	and ( 	left(UTAIT1,4) 		= 7011 		// Modification 
+												or left(UTAIT1,4) 	= 7071 
+												or left(UTAIT1,4) 	= 7091	 
+											)
+			)
+			or
+			(
+				(text(UTDIVI) = '003' or text(UTDIVI) = '004' or text(UTDIVI) = '005') 	and 	( UTIVTP <> 40)
+			)
+			;
+
+	ENDIF
+
+NEXT File
+
+
+  LEFT JOIN (TEMP_FACTURES2)
+LOAD 
+	 UBCONO 		as F_CodeGroupe, 		//Jointure
+     UBDIVI 		as F_CodeSociete, 		//Jointure
+     UBYEA4 		as F_AnneeComptable, 	//Jointure
+     repeat('0', 9 - len(UBIVNO)) & UBIVNO 	//On complète avec des 0 en préfixe pour avoir 9 caractères
+     				as F_NumFacture, 		//Jointure
+     UBORNO 		as F_NumCommande, 		//Jointure
+     UBDLIX			as F_IndexLivraison, 	//Jointure
+     UBPONR			as F_NumLigneCommande, 	//Jointure
+
+     AutoNumberHash128(UBITNO) 	as %Article_ID,
+      num(UBPRCH) 	as Regul_Prix, //// 18/06/2015
+    // ApplyMap('Map_Agent_Planning',trim(text(UBWHLO))&'-'&text(UBITNO),'N/A Agt') as F_Agent_Planning,
+     
+     //trim(UBITNO) 	as %Article_ID,
+     UBNEPR 		as F_PrixVteUnitaire,
+     UBITNO			as temp_UBITNO,
+     text(UBITNO)			as F_ArticleCode,
+     UBFACI as F_Etablissement_V12,
+    // ApplyMap('MAP_ArticleCodeAcq', UBITNO, 'NA') as F_ArticleCodeAcq,
+     
+   //  ApplyMap('MAP_CodeAcq', UBITNO&ApplyMap('Map_WHLO_V12_M3',UBWHLO),'NOK CODEACQ') as F_CodeAcq,
+     
+     
+    // Applymap('Map_FACI_V12_M3',UBFACI,'NOK_FACI')			as F_Etablissement, // Conversion V12 vers etablissement M3
+     
+     UBSPUN			as F_UniteVente
+//	 ApplyMap('Map_PR', UBFACI & '-' & text(UBITNO), 0)	as F_PrixRevientUnitaire
+
+FROM
+[$(vFolderV12)ODLINE.QVD]
+(qvd);
+
+
+
+LEFT JOIN (TEMP_FACTURES2)
+LOAD 
+	F_id,
+	if (	F_CodeSociete='001',
+			temp_UTAIT3,
+			ApplyMap('Map_Article_Techno',temp_UBITNO,'Undefined'))				as F_CodeTechno
+RESIDENT TEMP_FACTURES2;
+
+/*
+Map_Article_CoutStandard:
+MAPPING LOAD distinct
+CodeArticle,
+CoutStandardPiece
+RESIDENT tempFactures
+ORDER BY  DESC;
+*/
+
+//GUILLAUME
+NoConcatenate
+TEMP_FACTURES_3:
+LOAD *, 'TEMP_FACTURES_3' as 'TEMP_FACTURES_3'
+	 
+RESIDENT TEMP_FACTURES2;
+LEFT JOIN
+
+LOAD  
+     text(MBITNO) as F_ArticleCode,
+     ApplyMap('Map_WHLO_M3_V12',MBWHLO)  as F_CodeDepot_V12, 
+     MBPUIT as F_CodeAcq
+    
+FROM
+[$(vFolderM3)MITBAL.QVD]
+(qvd)
+where MBCONO = 200
+;
+drop table TEMP_FACTURES2;
+rename table TEMP_FACTURES_3 to TEMP_FACTURES2;
+
+//NoConcatenate
+
+TEMP_FACTURES:
+
+// AXS ==>> rajouter la condition, si  Article_Code_Acq= 1, alors forcer 20150611, si  Article_Code_Acq = 2 alors forcer 20150610
+LOAD *, 
+	if (num(Regul_Prix) =1 ,0,F_Quantite1) 	as F_Quantite,
+	if (num(date#(UTIVDT, 'YYYYMMDD')) < num(makedate(2015,6,11)), 
+		if (F_CodeAcq = 1,
+			num(makedate(2015,6,11)),
+			num(makedate(2015,6,10))),
+		num(date#(UTIVDT, 'YYYYMMDD'))
+		) as F_DateFactureJointurePR 
+RESIDENT TEMP_FACTURES2;
+
+DROP TABLE TEMP_FACTURES2;
+
+//RENAME Table TEMP_FACTURES2 to TEMP_FACTURES;
+//Drop Field F_DateFacture ;
+
+//TEMP_FACTURES:
+//LOAD *
+//	,F_DateFacture2  as F_DateFacture
+//RESIDENT TEMP_FACTURES3;
+
+tempPRS:
+LOAD 
+	ApplyMap('Map_FACI_M3_V12',text(SubField(PRS_Cle,'-',1))) 			as F_Etablissement_V12,
+	//SubField(PRS_Cle,'-',1)				as F_Etablissement_V12,
+	ApplyMap('Map_FACI_M3_V12',SubField(PRS_Cle,'-',1)	)			as PR_F_Etablissement,
+	SubField(PRS_Cle,'-',2) 			as temp_UBITNO,
+	SubField(PRS_Cle,'-',2) 			as PR_temp_UBITNO,
+	 
+    num(PRS_DateDebut) 	as F_DateFactureJointurePR, 
+//    date(PRS_DateDebut,'DD/MM/YYYY') 	as PR_DateFacture, 
+    
+    PRS_PrixRevient 		as F_PrixRevientUnitaire, 	//KOASU4
+    PRS_Status 				as F_PrixRevientOrigine,
+   	PRS_Manufacturing_Cost 	as F_PrixCtProd,			//KOASU3
+	PRS_Variable_Cost 		as F_PrixVarCost,			//KOASU2
+	PRS_Purchasing_Cost 	as F_PrixAchat, 			//KOASU1
+	PRS_Purchasing_Cost_Purchased as F_PrixPurchased, 	// PR KOCSU1 des produits achetés MMS002
+    'PR M3' 				as PR_F_Type,
+    //*********************** DETAILS PR 13/10/2015 MAL *********************************/
+	PRS_Detail_KOASU1_Purchasing_Cost 		as F_DET_PrixAchat, 
+	PRS_Detail_KOASU1_PackagingCost 		as F_DET_PrixEmballage, 
+	PRS_Detail_KOASU2_DirectLaborCost 		as F_DET_PrixMainOeuvre, 
+	PRS_Detail_KOASU2_SubContractingCost 	as F_DET_PrixSousTraitance, 
+	PRS_Detail_KOASU3_DirectMarchineCost 	as F_DET_PrixMachineDirect, 
+	PRS_Detail_KOASU3_IndirectCost 			as F_DET_PrixIndirect, 
+	PRS_Detail_KOASU3_SupportCost 			as F_DET_PrixSupport, 
+	PRS_Detail_KOASU4_RDCost 				as F_DET_PrixRD
+FROM
+[$(vFolderTransform)M3_PR_*.QVD]
+(qvd)
+;
+
+LEFT JOIN (TEMP_FACTURES)
+LOAD *
+RESIDENT tempPRS;
+
+DROP TABLE tempPRS;
+
+
+//Fin GUILLAUME
+
+
+tempRéel2013:
+CrossTable(Mois, Ventes, 3)
+LOAD if (Filiales='EFI', '001', if (Filiales='EFCO', '003', if (Filiales='EFEC', '004', '005'))) as Filiale, 
+	 trim([Cust code]) as [Cust code],
+	 Devise,
+     [01], 
+     [02], 
+     [03], 
+     [04], 
+     [05], 
+     [06], 
+     [07], 
+     [08], 
+     [09], 
+     [10], 
+     [11], 
+     [12]
+FROM
+[$(vFolderReferentialsIT)REF_Reel2013.xlsx]
+(ooxml, embedded labels, header is 3 lines, table is [Réel 2013]);
+
+
+Concatenate (TEMP_FACTURES)
+LOAD 
+	'Réel 2013'	 		as F_Type,
+	'R13_'&rowno()		as F_id, 
+	Filiale				as F_CodeSociete, 
+	Filiale				as %Societe_ID,
+	date(makedate(2013,num#(Mois)),'DD/MM/YYYY')	as F_DateFacture,
+	date(makedate(2013,num#(Mois)),'DD/MM/YYYY')	as F_DateComptable, 
+	[Cust code] 		as %ClientLivre_ID, 
+	[Cust code]			as F13_%ClientPayeur_ID,
+	0					as F_Quantite, 
+	Ventes				as F_Montant_SOC, 
+	Devise				as F_DeviseFacture, 
+	
+	if (Filiale<>'001',
+		ApplyMap('Map_Cust_CustGroup',Filiale&'-'&[Cust code], 'N/A'),
+		ApplyMap('Map_Cust_CustGroup_EFI',[Cust code], 'N/A')) 			 	as F_GroupeClient, 
+		//AXS :
+//		if (F_CodeSociete='001',
+//						ApplyMap('Map_Cust_CustGroup_EFI',[Cust code], 'N/A'),
+//	if	(F_CodeSociete='003',
+//						ApplyMap('Map_Cust_CD_CustGroup_M3',[Cust code], 'N/A') ,
+//						ApplyMap('Map_Cust_CustGroup',Filiale&'-'&[Cust code], 'N/A')))
+//		
+//				 	as F_GroupeClient,  
+		
+		
+	if (Filiale<>'001',
+		ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup',Filiale&'-'&[Cust code], 'N/A'), 'N/A'),
+		ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_EFI',[Cust code], 'N/A'), 'N/A')) 			 	as F_ClientPayeur_KeyAccount, 
+		
+		
+//		if (F_CodeSociete='001',
+//									ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_EFI',[Cust code], 'N/A'), 'N/A'),
+//			if (F_CodeSociete='003',
+//									ApplyMap('Map_Cust_LB_CustGroup_M3',ApplyMap('Map_Cust_CD_CustGroup_M3',[Cust code], 'N/A'), 'N/A'),
+//									ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup',Filiale&'-'&[Cust code], 'N/A'), 'N/A')))
+//		
+//				 	as F_ClientPayeur_KeyAccount, 
+		
+		
+//	ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup',Filiale&'-'&[Cust code], 'N/A'), 'N/A')//,
+//		 			 	as F_ClientPayeur_KeyAccount, 
+	'$(vLibExternalSales)'	as F_FlagInterco,
+	if (Filiale='001',
+			'EFI',
+			if (Filiale='003',
+					'US',
+					if (Filiale='004',
+							'CHN',
+							'UFP'
+					)
+			)
+	)					as CodeEtablissement,
+	
+	ApplyMap('Map_Societe_Zone',Filiale,'NA')		as F_Zone, 
+	ApplyMap('Map_Societe_Pays',Filiale,'NA')		as F_Pays, 
+	ApplyMap('Map_Societe_DeviseZone',Filiale,'NA')	as F_DeviseZone, 
+	
+	'EUR'				as F_DeviseGroupe
+
+RESIDENT tempRéel2013;
+
+DROP TABLE tempRéel2013;
+
+
+Concatenate (TEMP_FACTURES)
+LOAD 
+	'Ajout comptable' 	as F_Type,
+	'AC'&rowno()		as F_id, 
+	Sté					as F_CodeSociete, 
+	Sté					as %Societe_ID,
+	[N° pc], 
+	[Date cpt]			as F_DateComptable, 
+	[Date cpt]			as F_DateFacture, 
+//	Période, 
+	if (trim([Code client])='?', 'NA',[Code client]) 		as %ClientLivre_ID, 
+	if (trim([Code client])='?', 'NA',[Code client])		as AC_%ClientPayeur_ID,
+//	[Gd Cpte], 
+//	DAS, 
+	ApplyMap('Map_Techno_DAS',Techno,'N/A') as DAS,
+	Techno				as F_CodeTechno, 
+	
+	AutoNumberHash128(Référence) 	as %Article_ID,
+	//trim(Référence) 	as %Article_ID,
+	
+    if (isnull(Référence),'NA',Référence) as F_ArticleCode, 
+//	0 as Flag_AEffacer,
+	num(Compte) as F_CodeComptable,  
+	Q					as F_Quantite, 
+//	PU, 
+	CA					as F_Montant_SOC, 
+	Dev.				as F_DeviseFacture, 
+//	applymap('Map_Article_CoutStandard',Référence,0) as CoutStandardPiece,
+//	ApplyMap('Map_PR', 'EFI' & '-' & Référence, 0) as PrixRevientUnitaire,
+
+	if (Sté<>'001',
+		ApplyMap('Map_Cust_CustGroup',Sté&'-'&[Code client], 'N/A'),
+		ApplyMap('Map_Cust_CustGroup_EFI',[Code client], 'N/A')) 			 	as F_GroupeClient, 
+//
+
+		
+
+
+
+	if (Sté<>'001',
+		ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup',Sté&'-'&[Code client], 'N/A'), 'N/A'),
+		ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_EFI',[Code client], 'N/A'), 'N/A')) 			 	as F_ClientPayeur_KeyAccount, 
+
+
+
+
+
+
+	
+	'$(vLibExternalSales)'		as F_FlagInterco,
+	if (Sté='001',
+			'EFI',
+			if (Sté='003',
+					'US',
+					if (Sté='004',
+							'CHN',
+							'UFP'
+					)
+			)
+	)					as F_Etablissement_V12,
+	
+	ApplyMap('Map_Societe_Zone',Sté,'NA')		as F_Zone, 
+	ApplyMap('Map_Societe_Pays',Sté,'NA')		as F_Pays, 
+	ApplyMap('Map_Societe_DeviseZone',Sté,'NA')	as F_DeviseZone, 
+	
+	'EUR'			as F_DeviseGroupe,
+	Applymap('Map_WHLO_V12_M3',[dépôts] ,'NOK_WHLO')		as #CodeDepot_Regul_CA,
+	//Applymap('Map_WHLO_V12_M3',[dépôts] ,'NOK_WHLO')		as F_CodeDepot,
+	[dépôts] as F_CodeDepot_V12
+//	Commentaire, 
+//	Qtés, 
+//	[Complément d'info], 
+//	R, 
+//	S
+FROM
+[$(vFolderReferentialsUsers)Regul CA.xlsx]
+(ooxml, embedded labels, header is 4 lines, table is Data);
+
+
+
+//tempPRS:
+//LOAD 
+//	//ApplyMap('Map_FACI_M3_V12',SubField(PRS_Cle,'-',1)) 			as F_Etablissement_V12,
+//	SubField(PRS_Cle,'-',1) 			as F_Etablissement_V12,
+//	//ApplyMap('Map_FACI_V12_M3',SubField(PRS_Cle,'-',1),'NOK FACI M3') 				as F_Etablissement,
+//	//SubField(PRS_Cle,'-',1) 			as F_Etablissement, 
+//	SubField(PRS_Cle,'-',2) 			as temp_UBITNO, 
+//    date(PRS_DateDebut,'DD/MM/YYYY') 	as F_DateFacture, 
+//    PRS_PrixRevient 	as F_PrixRevientUnitaire, 
+//    PRS_Status 			as F_PrixRevientOrigine
+//FROM
+//[$(vFolderTransform)PR_*.QVD]
+//(qvd)
+////where PRP_V12_M3 = 'V12'
+//;
+//
+//LEFT JOIN (TEMP_FACTURES)
+//LOAD *
+//RESIDENT tempPRS;
+//
+//DROP TABLE tempPRS;
+
+LEFT JOIN (TEMP_FACTURES)
+LOAD Distinct
+     CCDIVI as F_CodeSociete, 
+     CCLOCD as F_DeviseSociete
+FROM
+[$(vFolderV12)CMNDIV.QVD]
+(qvd);
+
+LEFT JOIN (TEMP_FACTURES)
+LOAD 
+	DC_Date		as F_DateComptable,
+	DC_FromCurr	as F_DeviseSociete,
+	DC_ToCurr	as F_DeviseGroupe,
+	DC_Rate		as F_TauxConsoGroupe
+RESIDENT Devises_Conso;
+
+LEFT JOIN (TEMP_FACTURES)
+LOAD 
+	DC_Date		as F_DateComptable,
+	DC_FromCurr	as F_DeviseSociete,
+	DC_ToCurr	as F_DeviseZone,
+	DC_Rate		as F_TauxConsoZone
+RESIDENT Devises_Conso;
+
+//DROP Field F_id;
+DROP Field temp_UBITNO;
+DROP Field temp_UTAIT3;
+
+V12_FAITS:
+LOAD 
+	*,
+	if (F_Type='Facture',
+		FV12_%ClientPayeur_ID,
+		if (F_Type='Réel 2013', 
+			F13_%ClientPayeur_ID,
+			if (F_Type='Ajout comptable', 
+				AC_%ClientPayeur_ID,
+				if (F_Type='Ajout comptable', 
+					AC_%ClientPayeur_ID,
+					'N/A'
+				) 
+			) 
+		) 
+	) as %ClientPayeur_ID, 
+	F_Montant_SOC * F_TauxConsoZone 						as F_Montant_ZONE,
+	F_Montant_SOC * F_TauxConsoGroupe 						as F_Montant_GROUPE,
+	F_Montant_SOC - F_PrixRevientUnitaire * F_Quantite 		as F_Marge,
+	
+	F_Montant_SOC - (if(F_CodeAcq = 2, F_PrixPurchased , F_PrixVarCost) * F_Quantite )					as F_Marge_CtVariable, 
+	F_Montant_SOC - (if(F_CodeAcq = 2, F_PrixPurchased , F_PrixRevientUnitaire) * F_Quantite )			as F_Marge_CoutsDirects,
+	
+	if(F_CodeAcq = 2, F_PrixPurchased , F_PrixRevientUnitaire) * F_Quantite 		as F_CoutsDirects_SOC,
+	if(F_CodeAcq = 2, F_PrixPurchased , F_PrixVarCost) * F_Quantite  				as F_CoutsVariables_SOC,
+	
+	F_PrixRevientUnitaire * F_Quantite * F_TauxConsoZone 	as F_CoutsDirects_ZONE,
+	F_PrixRevientUnitaire * F_Quantite * F_TauxConsoGroupe 	as F_CoutsDirects_GROUPE,
+	1-F_PrixRevientUnitaire * F_Quantite / F_Montant_SOC 	as F_MargeUnitaire,
+	if (isnull(F_PrixRevientUnitaire), 'KO', 'OK') 			as F_FlagQualPR,
+	num(F_DateComptable) 									as %D
+	
+RESIDENT TEMP_FACTURES
+//WHERE not temp_UBITNO like 'D*'
+;//	 and isnum(right(temp_UBITNO,1));
+
+DROP TABLE TEMP_FACTURES;
+///$tab Carnet de commandes
+temp_CarnetCommande:
+LOAD OACONO as F_CodeGroupe, 
+     OADIVI as F_CodeSociete, 
+     OAORNO as F_NumCommande,
+	 OADIVI	as %Societe_ID,
+	 OAPYNO as %ClientPayeur_ID,
+	  OAPYNO as F_ClientPayeur_ID,
+	  if (OADIVI<>'001',
+		ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup',OADIVI&'-'&OAPYNO, 'N/A'), 'N/A'),
+		ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_EFI',OAPYNO, 'N/A'), 'N/A')) 			 	as F_ClientPayeur_KeyAccount, 
+		if (OADIVI<>'001',
+		ApplyMap('Map_Cust_CustGroup',OADIVI&'-'&OAPYNO, 'N/A'),
+		ApplyMap('Map_Cust_CustGroup_EFI',OAPYNO, 'N/A')) 			as F_GroupeClient,  // Mapping GoupeClient Car anomalie liaison des codes client avec le groupe dans la table de fait --> MAL 02/03/15
+//     OACRTP as temp_TypeTaux,
+     OACUCD as F_DeviseFacture,
+     MakeDate(year(today()), month(today())) as F_DateComptable
+FROM
+[$(vFolderV12)OOHEAD.QVD]
+(qvd);
+
+left join(temp_CarnetCommande)
+LOAD 
+	OBCONO 								as F_CodeGroupe, 
+	OBDIVI 								as F_CodeSociete, 
+	OBORNO 								as F_NumCommande, 
+	
+	//'CarnetCommandes' as #Origine_Client, // MAL 03/03/15
+	
+//	OBCUNO 								as %Client_ID,// MAL 03/03/15
+
+	//text(OBCUNO)								as %ClientLivre_ID,
+	//OBCUNO 								as PREV_ClientLivre_ID,
+	//ApplyMap('Map_Cust_Livre_Payeur',OBCUNO,'N/A') 			as %ClientPayeur_ID, //Existe-t-il un client payeur ? (PYNO) 
+	
+	//text(ApplyMap('Map_Cust_Livre_Payeur',OBCUNO,'N/A')) as %ClientPayeur_ID, // MAL 05/03/15 Mapping Client livré avec Payeur
+	//ApplyMap('Map_Cust_Livre_Payeur',OBCUNO,'N/A') as PREV_ClientPayeur_ID,
+	OBFACI as F_Etablissement_V12,
+	//Applymap('Map_FACI_V12_M3',OBFACI , 'NOK_FACI') 								as F_Etablissement, // Conversion V12 vers etablissement M3
+	'$(vLibExternalSales)'				as F_FlagInterco,
+    date(date#(OBLDED,'YYYYMMDD')) 		as F_DateLivraisonPrevue,
+    
+	AutoNumberHash128(OBITNO) 			as %Article_ID,
+	//trim(OBITNO) 			as %Article_ID, 
+	
+	ApplyMap('Map_Article_Techno',OBITNO,'Undefined')	as F_CodeTechno, 	// Ramener la techno au niveau de Carnet de commande car problème de liaison entre le prévisionnel/budget/réel, 
+																			//aucun liaison n'est fait pour le prévisionnel --> résolu MAL 02/03/15
+																			
+//	if (OBDIVI<>'001',
+//		ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup',OBDIVI&'-'&OBCUNO, 'N/A'), 'N/A'),
+//		ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_EFI',OBCUNO, 'N/A'), 'N/A')) 			 	as F_Client_KeyAccount, // MAL 03/03/15
+
+//if (OBDIVI<>'001',
+//		ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup',OBDIVI&'-'&Applymap('Map_Cust_Livre_Payeur',OBCUNO,'N/A'), 'N/A'), 'N/A'),
+//		ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_EFI',OBCUNO, 'N/A'), 'N/A')) 			 	as F_ClientPayeur_KeyAccount,  
+//		
+//		
+//	if (OBDIVI<>'001',
+//		ApplyMap('Map_Cust_CustGroup',OBDIVI&'-'&Applymap('Map_Cust_Livre_Payeur',OBCUNO,'N/A'), 'N/A'),
+//		ApplyMap('Map_Cust_CustGroup_EFI',OBCUNO, 'N/A')) 			as F_GroupeClient,  // Mapping GoupeClient Car anomalie liaison des codes client avec le groupe dans la table de fait --> MAL 02/03/15
+			
+	//ApplyMap('Map_Agent_Planning',trim(OBWHLO)&'-'&text(OBITNO),'N/A Agt') as F_Agent_Planning,
+	
+	OBPONR			as F_NumLigneCommande, 
+	OBWHLO 			as F_CodeDepot_V12,
+	//Applymap('Map_WHLO_V12_M3',OBWHLO ,'NOK_WHLO')			as F_CodeDepot,
+	OBNEPR / OBCOFS as F_PrixVteUnitaire, 
+	OBORST 			as F_StatutLigne, 
+	
+	ApplyMap('Map_Societe_Zone',OBDIVI,'NA') 		as F_Zone, 
+	ApplyMap('Map_Societe_Pays',OBDIVI,'NA')		as F_Pays, 
+	ApplyMap('Map_Societe_DeviseZone',OBDIVI,'NA') 	as F_DeviseZone, 
+	
+	'EUR'  	as F_DeviseGroupe, 
+	
+	OBPRCH 	as Regul_Prix,
+	
+	OBALQT 	as F_QuantiteDejaAllouee, 
+	OBDLQT 	as F_QuantiteLivreeNonFacturee, 
+	OBORQT 	as F_QuantiteCommandee, 
+	OBPLQT 	as F_QuantitePrelevee, 
+	OBRNQT 	as F_QuantiteRestantALivrer,
+	1 		as tempFlagLignePresente
+FROM
+	[$(vFolderV12)OOLINE.QVD]
+(qvd)
+WHERE OBORST<70
+and
+date(date#(OBLDED,'YYYYMMDD')) >= MonthStart(today())
+and
+date(date#(OBLDED,'YYYYMMDD')) <= MonthEnd(AddMonths(today(),3))
+and num(OBDIVI) <> 3
+;
+
+
+LEFT JOIN (temp_CarnetCommande)
+LOAD Distinct
+     CCDIVI as F_CodeSociete, 
+     CCLOCD as F_DeviseSociete
+FROM
+[$(vFolderV12)CMNDIV.QVD]
+(qvd);
+
+tempCouplesDevises:
+LOAD distinct
+	F_DeviseFacture,
+	F_DeviseSociete,
+	max(F_DateComptable) as tempF_DateComptable 
+RESIDENT V12_FAITS
+WHERE F_Type='Facture'
+GROUP BY F_DeviseFacture,F_DeviseSociete
+;
+LEFT JOIN (tempCouplesDevises)
+LOAD
+	F_DeviseFacture,
+	F_DeviseSociete,
+	F_DateComptable as tempF_DateComptable,
+	max (F_TauxChangeClientCompta) as F_TauxClientCompta
+RESIDENT V12_FAITS
+WHERE F_Type='Facture'
+GROUP BY F_DeviseFacture, F_DeviseSociete, F_DateComptable;
+
+DROP Field tempF_DateComptable;
+
+LEFT JOIN (temp_CarnetCommande)
+LOAD *
+RESIDENT tempCouplesDevises;
+
+LEFT JOIN (temp_CarnetCommande)
+LOAD 
+	DC_Date		as F_DateComptable,
+	DC_FromCurr	as F_DeviseSociete,
+	DC_ToCurr	as F_DeviseGroupe,
+	DC_Rate		as F_TauxConsoGroupe
+RESIDENT Devises_Conso;
+
+LEFT JOIN (temp_CarnetCommande)
+LOAD 
+	DC_Date		as F_DateComptable,
+	DC_FromCurr	as F_DeviseSociete,
+	DC_ToCurr	as F_DeviseZone,
+	DC_Rate		as F_TauxConsoZone
+RESIDENT Devises_Conso;
+
+
+FOR i=0 to NoOfRows('tempCouplesDevises')-1
+	LET vDeviseFacture=peek('F_DeviseFacture',$(i),'tempCouplesDevises');
+	LET vDeviseSociete=peek('F_DeviseSociete',$(i),'tempCouplesDevises');
+	LET vMaxDateComptable=peek('F_DateComptable',$(i),'tempCouplesDevises');
+	LET vTauxClientCompta=peek('F_TauxClientCompta',$(i),'tempCouplesDevises');
+
+	TRACE $(vDeviseFacture) $(vDeviseSociete), $(vMaxDateComptable), $(vTauxClientCompta);
+
+NEXT;
+
+
+DROP TABLE tempCouplesDevises;
+
+
+Concatenate(V12_FAITS)
+LOAD *,
+	'CC_'&rowno()			as F_id, 
+	'CCommande'		as F_Type,
+	num(F_DateLivraisonPrevue) as %D,
+	if (num(F_DateLivraisonPrevue)<num(today()), 1, 0) as F_CC_EnRetard,
+	if (month(F_DateLivraisonPrevue)=month(today()) and year(F_DateLivraisonPrevue)=year(today()),
+			'M0', 
+			if (month(F_DateLivraisonPrevue)=month(addmonths(today(),1)) and year(F_DateLivraisonPrevue)=year(addmonths(today(),1)),
+					'M1', 
+					if (month(F_DateLivraisonPrevue)=month(addmonths(today(),2)) and year(F_DateLivraisonPrevue)=year(addmonths(today(),2)),
+							'M2', 
+							if (month(F_DateLivraisonPrevue)=month(addmonths(today(),3)) and year(F_DateLivraisonPrevue)=year(addmonths(today(),3)),
+									'M3',
+									null()
+							)
+					)
+			)
+	) as F_CCommmande_Mois,
+	F_PrixVteUnitaire * F_QuantiteDejaAllouee		as F_MontantDejaAlloue_CLI, 
+	F_PrixVteUnitaire * F_QuantiteLivreeNonFacturee	as F_MontantLivreNonFacture_CLI, 
+	F_PrixVteUnitaire * F_QuantiteCommandee			as F_MontantCommande_CLI, 
+	F_PrixVteUnitaire * F_QuantitePrelevee			as F_MontantPreleve_CLI, 
+	F_PrixVteUnitaire * F_QuantiteRestantALivrer	as F_MontantRestantALivrer_CLI,
+	F_PrixVteUnitaire / F_TauxClientCompta * F_QuantiteDejaAllouee			as F_MontantDejaAlloue_SOC, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_QuantiteLivreeNonFacturee	as F_MontantLivreNonFacture_SOC, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_QuantiteCommandee			as F_MontantCommande_SOC, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_QuantitePrelevee				as F_MontantPreleve_SOC, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_QuantiteRestantALivrer		as F_MontantRestantALivrer_SOC,
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoZone * F_QuantiteDejaAllouee		as F_MontantDejaAlloue_ZONE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoZone * F_QuantiteLivreeNonFacturee	as F_MontantLivreNonFacture_ZONE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoZone * F_QuantiteCommandee			as F_MontantCommande_ZONE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoZone * F_QuantitePrelevee			as F_MontantPreleve_ZONE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoZone * F_QuantiteRestantALivrer		as F_MontantRestantALivrer_ZONE,
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoGroupe * F_QuantiteDejaAllouee			as F_MontantDejaAlloue_GROUPE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoGroupe * F_QuantiteLivreeNonFacturee	as F_MontantLivreNonFacture_GROUPE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoGroupe * F_QuantiteCommandee			as F_MontantCommande_GROUPE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoGroupe * F_QuantitePrelevee				as F_MontantPreleve_GROUPE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoGroupe * F_QuantiteRestantALivrer		as F_MontantRestantALivrer_GROUPE
+
+RESIDENT temp_CarnetCommande
+WHERE tempFlagLignePresente=1;//On ne prend pas les entêtes sans ligne (cas ou les lignes ne rentrent pas dans nos critères de sélection au chargement)
+
+DROP TABLE temp_CarnetCommande;
+DROP FIELD tempFlagLignePresente;
+///$tab Réduction / articles
+/*
+temp_restrictionArticles:
+LOAD Distinct
+	F_ArticleCode as FF_Article,
+	F_CodeSociete as FF_CodeSociete,
+	if (F_CodeSociete='001',
+		1,
+		if(not isnum(left(F_ArticleCode,2)) 
+				or (isnum(left(F_ArticleCode,2)) and num(left(F_ArticleCode,2))>13),
+				1,
+				0
+		)
+	) as A_Prendre
+RESIDENT V12_FAITS;
+
+
+right join(V12_FAITS)
+LOAD
+	FF_Article as F_ArticleCode,
+	FF_CodeSociete as F_CodeSociete
+RESIDENT temp_restrictionArticles;
+
+DROP TABLE temp_restrictionArticles;
+
+*/
+
+
+left join(V12_FAITS)
+LOAD Distinct
+	F_ArticleCode,
+	F_CodeSociete,
+	if (F_CodeSociete='001',
+		1
+		//,if(not isnum(left(F_ArticleCode,2)) or (isnum(left(F_ArticleCode,2)) and num(left(F_ArticleCode,2))>= 01)
+		//		,1
+				,1
+		//)
+	) as temp_APrendre
+RESIDENT V12_FAITS;
+
+FAITS2:
+NoConcatenate
+LOAD *
+RESIDENT V12_FAITS
+WHERE 
+	temp_APrendre=1 
+	or isnull(F_ArticleCode); //Factures de RFA ou de royalties
+
+
+DROP TABLE V12_FAITS;
+DROP FIELD temp_APrendre;
+RENAME TABLE FAITS2 to V12_FAITS;
+///$tab PPM Client
+GED_NCP:
+LOAD 
+    DOCUMENT_ID 							as F_NCP_id,
+    DATE_CREATION_NCP 						as %D,
+    trim(CLIENT_PAYEUR) 					as %ClientPayeur_ID,
+    '0'&trim(CODE_SOCIETE) 					as %Societe_ID,
+	if ('0'&trim(CODE_SOCIETE)<>'001',
+		ApplyMap('Map_Cust_CustGroup','0'&trim(CODE_SOCIETE)&'-'&trim(CLIENT_PAYEUR), 'N/A'),
+		ApplyMap('Map_Cust_CustGroup_EFI',trim(CLIENT_PAYEUR), 'N/A')) 			 					as F_GroupeClient, 
+	if ('0'&trim(CODE_SOCIETE)<>'001',
+		ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup','0'&trim(CODE_SOCIETE)&'-'&trim(CLIENT_PAYEUR), 'N/A'), 'N/A'),
+		ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_EFI',trim(CLIENT_PAYEUR), 'N/A'), 'N/A')) 			 	as F_ClientPayeur_KeyAccount, 
+    NetWorkDays(DATE0 ,DATE1BIS) 		as Délai_New_AR,
+    NetWorkDays(DATE0 ,DATE2BIS) 		as Délai_New_PlanAction,
+    NetWorkDays(DATE0 ,DATE3BIS) 		as Délai_New_Cloture,
+    DATE_CREATION_NCP 					as F_NCP_DateCreation,
+    DATE3BIS 							as F_NCP_DateCloture,
+    ORIGINE_NCP 						as F_NCP_Origine,
+    CREATEUR							as F_NCP_Createur
+//	"RACINE_CLIENT",
+//   // YEAR(DATE_CREATION_NCP) as ANNEE,// CLE
+//    MONTH(DATE_CREATION_NCP) as MOIS_CREATION_NCP,
+//    DATE0,
+//    YEAR(DATE0) as DATE_CODE,
+//    DATE1BIS  as "Date_Accusé_Réception_Récl",
+//    DATE2BIS as "Date mise en place PAC",
+//    DATE3BIS as "Date_Cloture"	,
+//    DELAI,
+//    "DELAI_OBJECTIF1",
+//    "DELAI_OBJECTIF2",
+//    "DELAI_OBJECTIF3",
+//    "DELAI_REEL1",
+//    "DELAI_REEL2",
+//    "DELAI_REEL3",
+//    "DOCUMENT_ID",
+//    "ETAT_DOCUMENT",
+//    "ETAT_PROCESSUS",
+//    //"INS_ID",
+//    "LIEU_LIVRE",
+//    "NOM_CREATEUR",
+//    "NOUVELLE_INCIDENT",
+//    "NUMERO_NCP",
+//    "PROBLEME_RECURSIF",
+//    "REF_EFI",
+//    "TITRE_NCP",
+//    UNITE,
+//    "VERSION_NCP",
+//    "ARTICLE_SID",
+//    ACRDES,
+//    ACCDES,
+//    SOCIET,
+//// Trim('0'&SOCIET) as Société,//CLE
+//    LIEUDE,
+//    "CLIENT_PAYEUR" as CLIENT_PAYEUR_GED,
+////,	autonumber(CLIENT_PAYEUR,CLIENT_LIVRE)as CLE_CLIENT,
+//	// YEAR(DATE_CREATION_NCP) & autonumber(CLIENT_PAYEUR,CLIENT_LIVRE) as CLE_BIS
+//	
+//   //condition de prise en compte des NCP
+//    (YEAR(DATE_CREATION_NCP)&Trim('0'&SOCIET)) as CLETER
+FROM
+[$(vFolderP03)dbo.GED_NCP_ENTETE.QVD]
+(qvd)       
+   
+    WHERE
+"ORIGINE_NCP" <> 'Proto' 
+AND "ETAT_PROCESSUS" <> '0 NC brouillon'
+AND DATE_CREATION_NCP > num(makedate(year(today())-2));
+
+LEFT JOIN (GED_NCP)
+LOAD 
+    DOCUMENT_ID 				as F_NCP_id,
+   	QTE_EIS						as F_NCP_Quantite_EIS
+//    ORIGINE
+//	"CODE_DEFAUT",
+//    "CODE_RESPONSABLE_N3",
+//    RESPONSABILITE,
+//   // "INS_ID",
+//    "DATE_CODE" as DATE_CODE_DETAIL,
+//    "NB_KM",
+//    "QTE_EXPERTISE",
+//    DEFAUT,
+//    COMMENTAIRE
+ FROM
+[$(vFolderP03)dbo.GED_NCP_DETAIL.QVD]
+(qvd)
+     WHERE  not wildmatch ("CODE_RESPONSABLE_N3", 'CLIENT','DNR','ND')
+;
+
+
+Concatenate (V12_FAITS)
+LOAD *,
+	'PPM_'&rowno()			as F_id,
+	'PPM Client' 	as F_Type
+RESIDENT GED_NCP;
+
+DROP TABLE GED_NCP;
+
+///$tab Taux de service
+Concatenate(V12_FAITS)
+
+LOAD 
+	'TauxService' as F_Type,
+	'TS'&rowno() as F_id,
+	right('00'&text(SOCIET),2) as %Societe_ID, 
+//	DATAM, 
+//	ACHETE, 
+//	LIEUDE, 
+//	NOMLD, 
+//	MARCHE, 
+//	RESPON, 
+//	MMGRTI, 
+//	MMITCL, 
+//	REFEFI, 
+//	DESEFI, 
+//	UNVENT, 
+//	TCPANL, 
+//	NCPANL, 
+//	SITEMA, 
+//	GROUMA, 
+//	MAGAS, 
+//	TYPCDE, 
+//	CONTRA, 
+//	NUMCDE, 
+	date(date#(DATEXP,'YYYYMMDD')) as %D, 
+//	if (date#(DATTIR,'YYYYMMDD')-date#(DATEXP,'YYYYMMDD')<=30, 1, 0) as TS_Statut, 
+//	DATMAJ, 
+//	QTECDE, 
+//	NJOURG, 
+//	NJOUR,
+	if  (NJOUR=0, 1, 0) as TS_Statut//, 
+//	DATTIR, 
+//	NUMLIG, 
+//	HEUEXP
+FROM
+[$(vFolderINFOCENTRE)TAUSERCD.QVD]
+(qvd)
+WHERE (LEFT(DATEXP,4)>=2013);
+
+///$tab FAITS
+//TMP_FAITS:
+//load *
+//,ApplyMap('Map_Agent_Planning',trim(F_CodeDepot_V12)&'-'&text(F_ArticleCode),'N/A Agt') as F_Agent_Planning
+//
+//Resident V12_FAITS;
+//
+//Drop table V12_FAITS;
+//RENAME Table TMP_FAITS to V12_FAITS;
+///$tab V12_Budget Montant
+NoConcatenate
+temp_Budget_Montant2:
+LOAD
+	*,
+	if(F_CodeSociete = '003' and num(Year_Budget)&num(right(Mois,2),00) < 201506,'V12_US','V12_NC') as F_FLAG_BUDGET_V12_M3,
+	BUDGET_CodeDepot 	as F_CodeDepot_V12,
+	ApplyMap('MAP_WHLO_FACI_V12',BUDGET_CodeDepot) as F_Etablissement_V12,
+	//Applymap('Map_WHLO_V12_M3',BUDGET_CodeDepot ,'NOK_WHLO') 		as F_CodeDepot, // mapping code V12 avec le Code M3
+	
+	ApplyMap('Map_Cust_Livre_Payeur',temp_%ClientPayeur_ID,'N/A') as ##_ClientPayeur_ID, 
+	text(ITNO )						as F_ArticleCode, 
+	AutoNumberHash128(ITNO) 	as %Article_ID,
+	
+//	ApplyMap('Map_Agent_Planning',text(Warehouse)&'-'&text(ITNO),'N/A Agt') as F_Agent_Planning,
+	
+	'BM_'&rowno()				as F_id,
+	'Budget Montant'  			as F_Type,
+	
+/***********************************************
+			24/09/2015
+			Groupe Client et Key Account ramenés directement depuis M3 pour la Société 003, V12 pour 001 et excel pour le reste!
+************************************************/
+	if (F_CodeSociete='001',
+						ApplyMap('Map_Cust_CustGroup_EFI',trim(temp_%ClientPayeur_ID), 'N/A'),
+	if	(F_CodeSociete='003',
+						ApplyMap('Map_Cust_CD_CustGroup_M3',trim(temp_%ClientPayeur_ID), 'N/A') ,
+						ApplyMap('Map_Cust_CustGroup',F_CodeSociete&'-'&temp_%ClientPayeur_ID, 'N/A')))
+		
+				 	as F_GroupeClient, 		
+		
+			if (F_CodeSociete='001',
+									ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_EFI',trim(temp_%ClientPayeur_ID), 'N/A'), 'N/A'),
+			if (F_CodeSociete='003',
+									ApplyMap('Map_Cust_LB_CustGroup_M3',ApplyMap('Map_Cust_CD_CustGroup_M3',temp_%ClientPayeur_ID, 'N/A'), 'N/A'),
+									ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup',F_CodeSociete&'-'&temp_%ClientPayeur_ID, 'N/A'), 'N/A')))
+		
+				 	as F_ClientPayeur_KeyAccount,  
+/************************************************/
+
+	
+	temp_%ClientPayeur_ID 								as toto,
+
+	
+	num(makedate(Year_Budget, num(right(Mois,2)))) 		as %D,
+	ApplyMap('Map_Societe_Zone',F_CodeSociete,'NA') 	as F_Zone, 
+	ApplyMap('Map_Societe_Pays',F_CodeSociete,'NA') 	as F_Pays, 
+	
+	makedate(Year_Budget, num(right(Mois,2))) 			as F_DateBudget,
+	Year_Budget							 				as F_AnneeBudget,
+	'EUR'												as F_DeviseGroupe,
+	ApplyMap('Map_Societe_DeviseZone',F_CodeSociete,'NA') 	as F_DeviseZone,
+	1 as PF // budget fourni n'est composé que de PF
+	//if(F_CodeSociete&'-'&BUDGET_CodeDepot <> '001-541','NO','YES') as Extra_T  // Exclusion vente Extra T d'EFI
+	
+RESIDENT temp_Budget_Montant
+//where  ( (num(F_CodeSociete) <> 3 ) and (num(Year_Budget)&num(right(Mois,2),00) < 201506) )
+//(F_CodeSociete <> '003' and Year_Budget = 2015 and num(right(Mois,2)) > 6)
+;
+
+
+
+DROP TABLE temp_Budget_Montant;
+
+LEFT JOIN (temp_Budget_Montant2)
+LOAD 
+     CCDIVI as F_CodeSociete, 
+     CCLOCD as F_DeviseSociete
+FROM
+[$(vFolderV12)CMNDIV.QVD]
+(qvd);
+
+
+
+
+LEFT JOIN (temp_Budget_Montant2)
+LOAD distinct
+	DB_Year		as F_AnneeBudget,
+	DB_FromCurr	as F_DeviseSociete,
+	DB_ToCurr	as F_DeviseGroupe,
+	DB_Rate		as F_TauxBudgetGroupe
+RESIDENT Devises_Budget;
+
+LEFT JOIN (temp_Budget_Montant2)
+LOAD distinct
+	DB_Year		as F_AnneeBudget,
+	DB_FromCurr	as F_DeviseSociete,
+	DB_ToCurr	as F_DeviseZone,
+	DB_Rate		as F_TauxBudgetZone
+RESIDENT Devises_Budget;
+
+
+Concatenate (V12_FAITS)
+LOAD 
+	*,
+	
+	text(temp_%ClientPayeur_ID) 	as %ClientPayeur_ID, 
+	F_CodeSociete 			as %Societe_ID,
+	Montant_Budget 			as F_MontantBudget_SOC, // modification Bugdet par Montant_Budget --> MAL
+
+	if (F_ClientPayeur_KeyAccount='GROUP', '$(vLibInternalSales)','$(vLibExternalSales)') 	as F_FlagInterco,  
+	Montant_Budget * F_TauxBudgetZone 		as F_MontantBudget_ZONE,
+	Montant_Budget * F_TauxBudgetGroupe 	as F_MontantBudget_GROUPE
+RESIDENT temp_Budget_Montant2;
+
+DROP TABLE temp_Budget_Montant2;
+
+//DROP Field temp_%ClientPayeur_ID; 
+///$tab V12_Budget Volume
+NoConcatenate
+temp_Budget_Volume2:
+LOAD
+	*,
+	if(F_CodeSociete = '003' and num(Year_Budget)&num(right(Mois,2),00) < 201506,'V12_US','V12_NC') as F_FLAG_BUDGET_V12_M3,
+	BUDGET_CodeDepot as F_CodeDepot_V12,
+	ApplyMap('MAP_WHLO_FACI_V12',BUDGET_CodeDepot) as F_Etablissement_V12,
+	//Applymap('Map_WHLO_V12_M3',BUDGET_CodeDepot ,'NOK_WHLO') as F_CodeDepot,
+	
+	ApplyMap('Map_Cust_Livre_Payeur',temp_%ClientPayeur_ID,'N/A') as ##_ClientPayeur_ID,
+	AutoNumberHash128(ITNO) as %Article_ID,
+	text(ITNO )					as F_ArticleCode, 
+	//ApplyMap('Map_Agent_Planning',trim(Warehouse)&'-'&text(ITNO),'N/A Agt') as F_Agent_Planning,
+	
+	
+	
+	'BV_'&rowno()			as F_id,
+	'Budget Volume'			as F_Type,
+/***********************************************
+			24/09/2015
+			Groupe Client et Key Account ramenés directement depuis M3 pour la Société 003, V12 pour 001 et excel pour le reste!
+************************************************/
+	if (F_CodeSociete='001',
+						ApplyMap('Map_Cust_CustGroup_EFI',trim(temp_%ClientPayeur_ID), 'N/A'),
+	if	(F_CodeSociete='003',
+						ApplyMap('Map_Cust_CD_CustGroup_M3',trim(temp_%ClientPayeur_ID), 'N/A') ,
+						ApplyMap('Map_Cust_CustGroup',F_CodeSociete&'-'&temp_%ClientPayeur_ID, 'N/A')))
+		
+				 	as F_GroupeClient, 
+
+		if (F_CodeSociete='001',
+									ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_EFI',trim(temp_%ClientPayeur_ID), 'N/A'), 'N/A'),
+			if (F_CodeSociete='003',
+									ApplyMap('Map_Cust_LB_CustGroup_M3',ApplyMap('Map_Cust_CD_CustGroup_M3',temp_%ClientPayeur_ID, 'N/A'), 'N/A'),
+									ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup',F_CodeSociete&'-'&temp_%ClientPayeur_ID, 'N/A'), 'N/A')))
+		
+				 	as F_ClientPayeur_KeyAccount,  
+/************************************************/
+	
+	num(makedate(Year_Budget, num(right(Mois,2)))) 		as %D,
+	ApplyMap('Map_Societe_Zone',F_CodeSociete,'NA') 	as F_Zone, 
+	ApplyMap('Map_Societe_Pays',F_CodeSociete,'NA') 	as F_Pays, 
+	makedate(Year_Budget, num(right(Mois,2))) 			as F_DateBudget,
+	Year_Budget		as F_AnneeBudget,
+	'EUR'			as F_DeviseGroupe,
+	ApplyMap('Map_Societe_DeviseZone',F_CodeSociete,'NA') 	as F_DeviseZone,
+	1 as PF
+	//if(F_CodeSociete&'-'&BUDGET_CodeDepot <> '001-541','NO','YES') as Extra_T
+	
+	
+RESIDENT temp_Budget_Volume 
+//where  ( (num(F_CodeSociete) <> 3 ) and (num(Year_Budget)&num(right(Mois,2),00) < 201506) )
+
+//(F_CodeSociete <> '003' and Year_Budget = 2015 and num(right(Mois,2)) > 6)
+//where F_CodeSociete&'-'&BUDGET_CodeDepot <> '001-541';  // Exclusion vente Extra T d'EFI
+;
+
+DROP TABLE temp_Budget_Volume;
+
+
+
+
+
+LEFT JOIN (temp_Budget_Volume2)
+LOAD 
+     CCDIVI as F_CodeSociete, 
+     CCLOCD as F_DeviseSociete
+FROM
+[$(vFolderV12)CMNDIV.QVD]
+(qvd);
+
+LEFT JOIN (temp_Budget_Volume2)
+LOAD distinct
+	DB_Year		as F_AnneeBudget,
+	DB_FromCurr	as F_DeviseSociete,
+	DB_ToCurr	as F_DeviseGroupe,
+	DB_Rate		as F_TauxBudgetGroupe
+RESIDENT Devises_Budget;
+
+LEFT JOIN (temp_Budget_Volume2)
+LOAD distinct
+	DB_Year		as F_AnneeBudget,
+	DB_FromCurr	as F_DeviseSociete,
+	DB_ToCurr	as F_DeviseZone,
+	DB_Rate		as F_TauxBudgetZone
+RESIDENT Devises_Budget;
+
+
+
+
+Concatenate (V12_FAITS)
+//join (FAITS)
+LOAD 
+	*,
+	text(temp_%ClientPayeur_ID) 	as %ClientPayeur_ID, 
+
+
+	F_CodeSociete 			as %Societe_ID,
+	[Volume_Budget] 		as F_QuantiteBudget, //remplacer Budget par [Budget 2015 EFI] --> MAL
+	if (F_ClientPayeur_KeyAccount='GROUP', '$(vLibInternalSales)','$(vLibExternalSales)') 	as F_FlagInterco 
+
+RESIDENT temp_Budget_Volume2;
+
+DROP TABLE temp_Budget_Volume2;
+//DROP Field temp_%ClientPayeur_ID; 
+
+
+///$tab Calendrier
+//
+//CALENDRIER:
+//LOAD distinct
+//	%D,
+//	date(%D) as Cal_Date,
+//	Day(%D) as Cal_Jour,
+//	Month(%D) as Cal_Mois,
+//	num(Month(%D)) as Cal_MoisNum,
+//	'Q' & Ceil(Month(%D)/3) as Cal_Trimestre,
+//	if (Year(%D)>=year(today())-1, Year(%D)) as Cal_AnneeSel, //Pour ne pas faire apparaitre N-2 dans les sélections
+//	Year(%D) as Cal_Annee,
+//	Year(%D)-1 as Cal_Annee_1,
+//	Year(%D) & '-' & right('0'&num(Month(%D)),2) as Cal_AnneeMois,
+//	if (Month(%D)=1,
+//		Year(%D)-1 & '-' & 12,
+//		Year(%D) & '-' & right('0'&(num(Month(%D))-1),2)		
+//	) as Cal_AnneeMois_1,
+//	if (Month(%D)<=2,
+//		Year(%D)-1 & '-' & right('0'&num(Month(%D))+10,2),
+//		Year(%D) & '-' & right('0'&(num(Month(%D))-2),2)		
+//	) as Cal_AnneeMois_2
+//RESIDENT V12_FAITS
+//
+//;
+///$tab M3
+
+///$tab M3_Devises
+//
+////Devises de consolidation
+//		temp_DevisesConso:
+//		LOAD 
+//			month(Date) as DC_Month, 
+//			year(Date) 	as DC_Year, 
+//			From_Curr 	as DC_FromCurr, 
+//			To_Curr 	as DC_ToCurr, 
+//			Rate 		as DC_Rate
+//		FROM
+//		[$(vFolderReferentialsUsers)REF_Devises_Conso.xlsx]
+//		(ooxml, embedded labels, header is 1 lines, table is Data);
+//		
+//		//Par date, on récupère la liste des devises concernées (en From ou en To) pour créer les taux à 1.
+//		temp_isoDevises:
+//		LOAD Distinct
+//			DC_Month,
+//			DC_Year,
+//			DC_FromCurr as DC_Curr
+//		RESIDENT temp_DevisesConso;
+//		Concatenate(temp_isoDevises)
+//		LOAD Distinct
+//			DC_Month,
+//			DC_Year,
+//			DC_ToCurr as DC_Curr
+//		RESIDENT temp_DevisesConso;
+//		
+//		
+//		Concatenate(temp_DevisesConso)
+//		LOAD Distinct
+//			DC_Month,
+//			DC_Year,
+//			DC_Curr as DC_FromCurr,
+//			DC_Curr as DC_ToCurr,
+//			1 as DC_Rate
+//		RESIDENT temp_isoDevises;
+//		
+//		DROP TABLE temp_isoDevises;
+//		
+//		temp_MinDate:
+//		LOAD
+//			min(makedate(DC_Year,DC_Month)) as minDate
+//		RESIDENT temp_DevisesConso;
+//		
+//		LET vMinDate = num(peek('minDate',0,'temp_MinDate'));
+//		DROP TABLE temp_MinDate;
+//		
+//		Devises_Conso:
+//		LOAD 
+//			date($(vMinDate) + IterNo() - 1) as DC_Date,
+//			month($(vMinDate) + IterNo() - 1) as DC_Month,
+//			year($(vMinDate) + IterNo() - 1) as DC_Year
+//		AUTOGENERATE 1 WHILE ($(vMinDate) + IterNo() - 1) <= num(today());
+//		
+//		LEFT JOIN (Devises_Conso)
+//		LOAD *
+//		RESIDENT temp_DevisesConso;
+//		
+//		DROP TABLE temp_DevisesConso;
+//		
+////Devises de budget
+//		Devises_Budget:
+//		LOAD Year as DB_Year, 
+//		     From_Curr as DB_FromCurr, 
+//		     To_Curr as DB_ToCurr, 
+//		     Rate as DB_Rate
+//		FROM
+//		[$(vFolderReferentialsUsers)REF_Devises_Budget.xlsx]
+//		(ooxml, embedded labels, header is 1 lines, table is Data);
+//
+//
+//		
+//		//Par date, on récupère la liste des devises concernées (en From ou en To) pour créer les taux à 1.
+//		temp_isoDevises:
+//		LOAD Distinct
+//			DB_Year,
+//			DB_FromCurr as DB_Curr
+//		RESIDENT Devises_Budget;
+//		Concatenate(temp_isoDevises)
+//		LOAD Distinct
+//			DB_Year,
+//			DB_ToCurr as DB_Curr
+//		RESIDENT Devises_Budget;
+//		
+//		
+//		Concatenate(Devises_Budget)
+//		LOAD Distinct
+//			DB_Year,
+//			DB_Curr as DB_FromCurr,
+//			DB_Curr as DB_ToCurr,
+//			1 as DB_Rate
+//		RESIDENT temp_isoDevises
+//		WHERE not isnull(DB_Year);
+//		
+//		DROP TABLE temp_isoDevises;
+///$tab M3_Factures
+
+LET vFileList = '$(vFolderM3Split)'&'OINACC*.QVD';
+//Pour chaque split mensuel du fichier OINACC
+FOR Each File in filelist (vFileList)
+	
+	//On ne charge qu'à partir de 2014, les données Réel 2013 viennent d'un fichier Excel
+	IF num#(left(right('$(File)',10),4))>=2014 THEN
+
+TEMP_FACTURES2:
+		LOAD
+			'Facture' 		as F_Type,
+			'FV12_'&rowno()	as F_id, 
+			UTCONO			as F_CodeGroupe, 		//Jointure
+			UTDIVI			as F_CodeSociete, 		//Jointure
+			UTYEA4			as F_AnneeComptable, 	//Jointure
+			UTCINO			as F_NumFacture, 		//Jointure
+			//UTIVNO			as F_NumFacture, 		//Jointure
+			UTCINO 			as F_NumFacture_OINACC,
+			UTORNO			as F_NumCommande, 		//Jointure
+			UTDLIX			as F_IndexLivraison, 	//Jointure
+//			num(LEFT(text(UTIVRF),3)) 	as F_NumLigneCommande, //Jointure ------> V12
+			num(LEFT(text(UTIVRF),5)) 	as F_NumLigneCommande, //Jointure ------> regle M3
+			UTDIVI			as %Societe_ID, 		//Jointure
+			-UTACAM			as F_Montant_SOC, 		//Devise filiale 
+			date(date#(UTACDT,'YYYYMMDD'))					as F_DateComptable,
+			
+			ApplyMap('Map_Societe_DeviseZone',UTDIVI,'NA')	as F_DeviseZone,
+			'EUR'			as F_DeviseGroupe, 
+			UTACDT , /// utiliser pour la gestion des PR dans TEMP_FACTURES3
+			
+			UTACQT			as F_Quantite1, 
+			UTAIT1			as F_CodeComptable, 
+			UTAIT2			as F_SectionAnalytique, 	//Cost center 
+			UTAIT3			as temp_UTAIT3, 		// TECHNO ?? COMPTABILISE
+			UTAIT3 			as F_CodeTechno, 		// TECHNO ?? COMPTABILISE
+			if (	UTDIVI='001' or UTDIVI='003',		// REGLE M3
+					if(	UTAIT6='HG000' or UTAIT6='GR505',
+						'$(vLibExternalSales)',
+						'$(vLibInternalSales)'
+					),
+					ApplyMap('Map_Cust_Interco', UTPYNO, '$(vLibExternalSales)')
+				) 			as F_FlagInterco, 
+				
+			UTPYNO as OINACC_Payeur,
+			
+//			ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_M3',UTPYNO, 'N/A'), 'N/A')  	as F_Client_KeyAccount, // MAL 03/03/15
+//			ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_M3',UTPYNO, 'N/A'), 'N/A')  	as F_ClientPayeur_KeyAccount,  
+//			ApplyMap('Map_Cust_CustGroup_M3',UTPYNO, 'N/A') 										as F_GroupeClient,
+			
+			ApplyMap('Map_Cust_LB_CustGroup_M3',ApplyMap('Map_Cust_CD_CustGroup_M3',UTPYNO, 'N/A'), 'N/A')  	as F_Client_KeyAccount, // MAL 03/03/15
+			ApplyMap('Map_Cust_LB_CustGroup_M3',ApplyMap('Map_Cust_CD_CustGroup_M3',UTPYNO, 'N/A'), 'N/A')  	as F_ClientPayeur_KeyAccount,  
+			ApplyMap('Map_Cust_CD_CustGroup_M3',UTPYNO, 'N/A') 										as F_GroupeClient,
+			
+			UTARAT			as F_TauxChangeClientCompta, 
+			-UTCUAM			as F_Montant_CLI, 	//facturé, devise client 
+			UTCUCD			as F_DeviseFacture, 
+			UTIVDT,
+			text(UTCUNO)	as %ClientLivre_ID, 
+			num(date#(UTIVDT, 'YYYYMMDD')) as F_DateFacture,
+			//date(date#(UTIVDT,'YYYYMMDD'),'DD/MM/YYYY')	as F_DateFacture, 
+			UTIVRF			as F_RefLigneCommande, 
+			UTPYNO 			as F_ClientPayeur_ID,
+			text(UTPYNO)	as FV12_%ClientPayeur_ID,  
+			UTWHLO		as F_CodeDepot
+			//ApplyMap('Map_WHLO_M3_V12',UTWHLO,'NOK WHLO V12') 				as F_CodeDepot_V12
+			
+		FROM
+		[$(File)]
+		(qvd)
+		WHERE 
+			(
+				(text(UTDIVI) = '001'	and ( 	left(UTAIT1,4) 		= 7011 		// Modification 
+												or left(UTAIT1,4) 	= 7071 
+												or left(UTAIT1,4) 	= 7091	 
+											)
+				)
+				or 
+				(text(UTDIVI) = '003'	and  	( UTAIT1 = 300100 	or UTAIT1 = 300200) ) // regle M3 pour EFCO
+			)
+			or
+			(
+				(text(UTDIVI) = '004' or text(UTDIVI) = '005') 	and 	( UTIVTP <> 40) // A MODIFIER au moment de lancement M3
+			)
+			;
+
+ENDIF
+
+NEXT File
+
+LEFT JOIN (TEMP_FACTURES2)
+
+
+left join
+
+LOAD 
+
+	 UBCONO 		as F_CodeGroupe, 		//Jointure
+     UBDIVI 		as F_CodeSociete, 		//Jointure
+     UBYEA4 		as F_AnneeComptable, 	//Jointure
+     //UBIVNO 		as F_NumFacture,
+     '0'&UBFACI&UBIVNO as F_NumFacture, // Jointure ---->>> Attention regle codification num facture M3 est differente de V12
+   //  UBIVNO as F_NumFacture_ODLINE,
+    
+    // repeat('0', 9 - len(UBIVNO)) & UBIVNO 	//On complète avec des 0 en préfixe pour avoir 9 caractères
+     	//			as F_NumFacture, 		//Jointure regle V12
+     num(UBPRCH) 	as Regul_Prix, //// 18/06/2015
+     UBORNO 		as F_NumCommande, 		//Jointure
+     UBDLIX			as F_IndexLivraison, 	//Jointure
+     UBPONR			as F_NumLigneCommande, 	//Jointure
+
+     AutoNumberHash128(UBITNO) 	as %Article_ID,
+	 UBITNO 		as ITNO,
+     UBNEPR 		as F_PrixVteUnitaire,
+     UBITNO			as temp_UBITNO,
+     text(UBITNO)	as F_ArticleCode,
+    // ApplyMap('MAP_ArticleCodeAcq', UBITNO, 'NA') as F_ArticleCodeAcq,
+    // ApplyMap('MAP_CodeAcq', UBITNO&UBWHLO, 'NOK CODEACQ' ) as F_CodeAcq,
+
+     UBFACI			as F_Etablissement,
+     UBWHLO			as F_CodeDepot,
+     UBSPUN			as F_UniteVente
+
+FROM
+[$(vFolderM3)ODLINE.QVD]
+(qvd);
+
+NoConcatenate
+
+TEMP_FACTURES_3:
+LOAD *, 'TEMP_FACTURES_3' as 'TEMP_FACTURES_3'
+	 
+RESIDENT TEMP_FACTURES2;
+LEFT JOIN
+
+LOAD  
+     text(MBITNO) as F_ArticleCode,
+    MBWHLO  as F_CodeDepot, 
+     MBPUIT as F_CodeAcq
+    
+FROM
+[$(vFolderM3)MITBAL.QVD]
+(qvd)
+where MBCONO = 200
+;
+drop table TEMP_FACTURES2;
+rename table TEMP_FACTURES_3 to TEMP_FACTURES2;
+
+//LEFT JOIN (TEMP_FACTURES2)
+
+//NoConcatenate
+
+TEMP_FACTURES:
+
+// AXS ==>> rajouter la condition, si  Article_Code_Acq= 1, alors forcer 20150611, si  Article_Code_Acq = 2 alors forcer 20150610
+LOAD *, 
+	if (num(Regul_Prix) =1 ,0,F_Quantite1) 	as F_Quantite,
+	if (num(date#(UTIVDT, 'YYYYMMDD')) < num(makedate(2015,6,11)), 
+		if (F_CodeAcq = 1,
+			num(makedate(2015,6,11)),
+			num(makedate(2015,6,10))),
+		num(date#(UTIVDT, 'YYYYMMDD'))
+		) as F_DateFactureJointurePR 
+RESIDENT TEMP_FACTURES2;
+
+DROP TABLE TEMP_FACTURES2;
+
+//RENAME Table TEMP_FACTURES2 to TEMP_FACTURES;
+//Drop Field F_DateFacture ;
+
+//TEMP_FACTURES:
+//LOAD *
+//	,F_DateFacture2  as F_DateFacture
+//RESIDENT TEMP_FACTURES3;
+
+tempPRS:
+LOAD 
+	SubField(PRS_Cle,'-',1)				as F_Etablissement,
+	SubField(PRS_Cle,'-',1)				as PR_F_Etablissement,
+	SubField(PRS_Cle,'-',2) 			as temp_UBITNO,
+	SubField(PRS_Cle,'-',2) 			as PR_temp_UBITNO,
+	 
+    num(PRS_DateDebut) 	as F_DateFactureJointurePR, 
+//    date(PRS_DateDebut,'DD/MM/YYYY') 	as PR_DateFacture, 
+    
+    PRS_PrixRevient 		as F_PrixRevientUnitaire, 
+    PRS_Status 				as F_PrixRevientOrigine,
+   	PRS_Manufacturing_Cost 	as F_PrixCtProd,
+	PRS_Variable_Cost 		as F_PrixVarCost,
+	PRS_Purchasing_Cost 	as F_PrixAchat,
+	PRS_Purchasing_Cost_Purchased as F_PrixPurchased, // PR KOCSU1 des produits achetés MMS002
+    'PR M3' 				as PR_F_Type,
+    
+    //*********************** DETAILS PR 13/10/2015 MAL *********************************/
+	PRS_Detail_KOASU1_Purchasing_Cost 		as F_DET_PrixAchat, 
+	PRS_Detail_KOASU1_PackagingCost 		as F_DET_PrixEmballage, 
+	PRS_Detail_KOASU2_DirectLaborCost 		as F_DET_PrixMainOeuvre, 
+	PRS_Detail_KOASU2_SubContractingCost 	as F_DET_PrixSousTraitance, 
+	PRS_Detail_KOASU3_DirectMarchineCost 	as F_DET_PrixMachineDirect, 
+	PRS_Detail_KOASU3_IndirectCost 			as F_DET_PrixIndirect, 
+	PRS_Detail_KOASU3_SupportCost 			as F_DET_PrixSupport, 
+	PRS_Detail_KOASU4_RDCost 				as F_DET_PrixRD
+	
+FROM
+[$(vFolderTransform)M3_PR_*.QVD]
+(qvd)
+;
+
+LEFT JOIN (TEMP_FACTURES)
+LOAD *
+RESIDENT tempPRS;
+
+DROP TABLE tempPRS;
+
+/////////////////////////////////////////////////////////
+
+LEFT JOIN (TEMP_FACTURES)
+LOAD Distinct
+     CCDIVI as F_CodeSociete, 
+     CCLOCD as F_DeviseSociete
+FROM
+[$(vFolderM3)CMNDIV.QVD]
+(qvd);
+
+LEFT JOIN (TEMP_FACTURES)
+LOAD 
+	DC_Date		as F_DateComptable,
+	DC_FromCurr	as F_DeviseSociete,
+	DC_ToCurr	as F_DeviseGroupe,
+	DC_Rate		as F_TauxConsoGroupe
+RESIDENT Devises_Conso;
+
+LEFT JOIN (TEMP_FACTURES)
+LOAD 
+	DC_Date		as F_DateComptable,
+	DC_FromCurr	as F_DeviseSociete,
+	DC_ToCurr	as F_DeviseZone,
+	DC_Rate		as F_TauxConsoZone
+RESIDENT Devises_Conso;
+
+
+
+M3_FAITS:
+LOAD 
+	*,
+	FV12_%ClientPayeur_ID									as %ClientPayeur_ID, 
+	F_Montant_SOC * F_TauxConsoZone 						as F_Montant_ZONE,
+	F_Montant_SOC * F_TauxConsoGroupe 						as F_Montant_GROUPE,
+	F_Montant_SOC - F_PrixRevientUnitaire * F_Quantite 		as F_Marge,
+	
+	//F_Montant_SOC - F_PrixCtProd * F_Quantite 				as F_Marge_CtProd,
+	//F_Montant_SOC - F_PrixVarCost * F_Quantite 				as F_Marge_CtVariable,
+	//F_Montant_SOC - F_PrixAchat * F_Quantite 				as F_Marge_CoutAchat,
+	
+	F_Montant_SOC - (if(F_CodeAcq = 2, F_PrixPurchased , F_PrixVarCost) * F_Quantite )					as F_Marge_CtVariable, 
+	F_Montant_SOC - (if(F_CodeAcq = 2, F_PrixPurchased , F_PrixRevientUnitaire) * F_Quantite )			as F_Marge_CoutsDirects,
+	
+	if(F_CodeAcq = 2, F_PrixPurchased , F_PrixRevientUnitaire) * F_Quantite 		as F_CoutsDirects_SOC,
+	if(F_CodeAcq = 2, F_PrixPurchased , F_PrixVarCost) * F_Quantite  				as F_CoutsVariables_SOC,
+	
+	
+	F_PrixRevientUnitaire * F_Quantite * F_TauxConsoZone 	as F_CoutsDirects_ZONE,
+	F_PrixRevientUnitaire * F_Quantite * F_TauxConsoGroupe 	as F_CoutsDirects_GROUPE,
+	1-F_PrixRevientUnitaire * F_Quantite / F_Montant_SOC 	as F_MargeUnitaire,
+	if (isnull(F_PrixRevientUnitaire), 'KO', 'OK') 			as F_FlagQualPR,
+	num(F_DateComptable) 									as %D
+	
+RESIDENT TEMP_FACTURES;
+
+//drop Table TEMP_FACTURES2;
+//drop Table TEMP_FACTURES3;
+DROP TABLE TEMP_FACTURES;
+///$tab M3_Carnet de Commandes
+temp_CarnetCommande:
+LOAD OACONO as F_CodeGroupe, 
+     OADIVI as F_CodeSociete, 
+     OAORNO as F_NumCommande,
+	 OADIVI	as %Societe_ID,
+	 OAPYNO as %ClientPayeur_ID,
+	 OAPYNO as F_ClientPayeur_ID,
+//	 ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_M3',OAPYNO, 'N/A'), 'N/A') 			 	as F_Client_KeyAccount, // MAL 03/03/15
+//	 ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_M3',OAPYNO, 'N/A'), 'N/A') 			 	as F_ClientPayeur_KeyAccount, 
+//	 ApplyMap('Map_Cust_CustGroup_M3',OAPYNO,'N/A') 			as F_GroupeClient,  // Mapping GoupeClient Car anomalie liaison des codes client avec le groupe dans la table de fait --> MAL 02/03/15
+	
+	ApplyMap('Map_Cust_LB_CustGroup_M3',ApplyMap('Map_Cust_CD_CustGroup_M3',OAPYNO, 'N/A'), 'N/A')  	as F_Client_KeyAccount, // MAL 03/03/15
+	ApplyMap('Map_Cust_LB_CustGroup_M3',ApplyMap('Map_Cust_CD_CustGroup_M3',OAPYNO, 'N/A'), 'N/A')  	as F_ClientPayeur_KeyAccount,  
+	ApplyMap('Map_Cust_CD_CustGroup_M3',OAPYNO, 'N/A') 										as F_GroupeClient,
+			
+//     OACRTP as temp_TypeTaux,
+     OACUCD as F_DeviseFacture,
+     MakeDate(year(today()), month(today())) as F_DateComptable
+FROM
+[$(vFolderM3)OOHEAD.QVD]
+(qvd);
+
+left join(temp_CarnetCommande)
+LOAD 
+	OBCONO 								as F_CodeGroupe, 
+	OBDIVI 								as F_CodeSociete, 
+	OBORNO 								as F_NumCommande, 
+
+	//text(OBCUNO)						as %ClientLivre_ID,
+	//OBCUNO 								as PREV_ClientLivre_ID,
+	//text(OBCUNO) as FV12_%ClientPayeur_ID,
+	//text(OBCUNO) 						as %ClientPayeur_ID, //Existe-t-il un client payeur ? (PYNO) 
+	//ApplyMap('Map_Cust_Livre_Payeur_M3',OBCUNO,'N/A') as FV12_%ClientPayeur_ID, 
+	//ApplyMap('Map_Cust_Livre_Payeur_M3',OBCUNO,'N/A') as %ClientPayeur_ID, 
+	
+	//ApplyMap('Map_Cust_Livre_Payeur_M3',OBCUNO,'N/A') as F_ClientPayeur_ID,
+	
+	OBFACI 								as F_Etablissement, 
+	//ApplyMap('Map_FACI_M3_V12',OBFACI,'NOK FACI V12') 				as F_Etablissement_V12,
+	'$(vLibExternalSales)'				as F_FlagInterco,
+    date(date#(OBLDED,'YYYYMMDD')) 		as F_DateLivraisonPrevue,
+    
+	AutoNumberHash128(OBITNO) 			as %Article_ID,
+	//trim(OBITNO) 			as %Article_ID, 
+	
+//	ApplyMap('Map_Article_Techno_M3',OBITNO,'Undefined')	as F_CodeTechno, 	// Ramener la techno au niveau de Carnet de commande car problème de liaison entre le prévisionnel/budget/réel, 
+																			//aucun liaison n'est fait pour le prévisionnel --> résolu MAL 02/03/15
+																			
+//	if (OBDIVI<>'001',
+//		ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup',OBDIVI&'-'&OBCUNO, 'N/A'), 'N/A'),
+		//ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_M3',Applymap('Map_Cust_Livre_Payeur_M3',OBCUNO,'N/A'), 'N/A'), 'N/A') 			 	as F_Client_KeyAccount, // MAL 26/06/15
+
+//if (OBDIVI<>'001',
+		//ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup',OBDIVI&'-'&OBCUNO, 'N/A'), 'N/A'),
+		//ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_M3',Applymap('Map_Cust_Livre_Payeur_M3',OBCUNO,'N/A'), 'N/A'), 'N/A') 			 	as F_ClientPayeur_KeyAccount, // 26/06/2015 
+		
+		
+	//if (OBDIVI<>'001',
+	//	ApplyMap('Map_Cust_CustGroup',OBDIVI&'-'&OBCUNO, 'N/A'),
+		//ApplyMap('Map_Cust_CustGroup_M3',Applymap('Map_Cust_Livre_Payeur_M3',OBCUNO,'N/A'), 'N/A') 			as F_GroupeClient,  // Mapping GoupeClient Car anomalie liaison des codes client avec le groupe dans la table de fait --> MAL 02/03/15
+			
+	//ApplyMap('Map_Agent_Planning',trim(OBWHLO)&'-'&text(OBITNO),'N/A Agt') as F_Agent_Planning,
+	
+	OBPONR			as F_NumLigneCommande, 
+	OBWHLO 			as F_CodeDepot,
+	//ApplyMap('Map_WHLO_M3_V12',OBWHLO,'NOK WHLO V12') 				as F_CodeDepot_V12,
+	OBNEPR / OBCOFS as F_PrixVteUnitaire, 
+	OBORST 			as F_StatutLigne, 
+	
+//	ApplyMap('Map_Societe_Zone',OBDIVI,'NA') 		as F_Zone, 
+//	ApplyMap('Map_Societe_Pays',OBDIVI,'NA')		as F_Pays, 
+	ApplyMap('Map_Societe_DeviseZone',OBDIVI,'NA') 	as F_DeviseZone, 
+	
+	'EUR'  	as F_DeviseGroupe, 
+	OBPRCH 	as Regul_Prix,
+	
+	OBALQT 	as F_QuantiteDejaAllouee, 
+	OBDLQT 	as F_QuantiteLivreeNonFacturee, 
+	OBORQT 	as F_QuantiteCommandee, 
+	OBPLQT 	as F_QuantitePrelevee, 
+	OBRNQT 	as F_QuantiteRestantALivrer,
+	1 		as tempFlagLignePresente
+FROM
+	[$(vFolderM3)OOLINE.QVD]
+(qvd)
+WHERE OBORST<70
+and
+date(date#(OBLDED,'YYYYMMDD')) >= MonthStart(today())
+and
+date(date#(OBLDED,'YYYYMMDD')) <= MonthEnd(AddMonths(today(),3))
+;
+
+LEFT JOIN (temp_CarnetCommande)
+LOAD Distinct
+     CCDIVI as F_CodeSociete, 
+     CCLOCD as F_DeviseSociete
+FROM
+[$(vFolderM3)CMNDIV.QVD]
+(qvd);
+
+tempCouplesDevises:
+LOAD distinct
+	F_DeviseFacture,
+	F_DeviseSociete,
+	max(F_DateComptable) as tempF_DateComptable 
+RESIDENT M3_FAITS
+WHERE F_Type='Facture'
+GROUP BY F_DeviseFacture,F_DeviseSociete
+;
+LEFT JOIN (tempCouplesDevises)
+LOAD
+	F_DeviseFacture,
+	F_DeviseSociete,
+	F_DateComptable as tempF_DateComptable,
+	max (F_TauxChangeClientCompta) as F_TauxClientCompta
+RESIDENT M3_FAITS
+WHERE F_Type='Facture'
+GROUP BY F_DeviseFacture, F_DeviseSociete, F_DateComptable;
+
+DROP Field tempF_DateComptable;
+
+LEFT JOIN (temp_CarnetCommande)
+LOAD *
+RESIDENT tempCouplesDevises;
+
+LEFT JOIN (temp_CarnetCommande)
+LOAD 
+	DC_Date		as F_DateComptable,
+	DC_FromCurr	as F_DeviseSociete,
+	DC_ToCurr	as F_DeviseGroupe,
+	DC_Rate		as F_TauxConsoGroupe
+RESIDENT Devises_Conso;
+
+LEFT JOIN (temp_CarnetCommande)
+LOAD 
+	DC_Date		as F_DateComptable,
+	DC_FromCurr	as F_DeviseSociete,
+	DC_ToCurr	as F_DeviseZone,
+	DC_Rate		as F_TauxConsoZone
+RESIDENT Devises_Conso;
+
+
+FOR i=0 to NoOfRows('tempCouplesDevises')-1
+	LET vDeviseFacture=peek('F_DeviseFacture',$(i),'tempCouplesDevises');
+	LET vDeviseSociete=peek('F_DeviseSociete',$(i),'tempCouplesDevises');
+	LET vMaxDateComptable=peek('F_DateComptable',$(i),'tempCouplesDevises');
+	LET vTauxClientCompta=peek('F_TauxClientCompta',$(i),'tempCouplesDevises');
+
+	TRACE $(vDeviseFacture) $(vDeviseSociete), $(vMaxDateComptable), $(vTauxClientCompta);
+
+NEXT;
+
+
+DROP TABLE tempCouplesDevises;
+
+
+Concatenate(M3_FAITS)
+LOAD *,
+	'CC_'&rowno()			as F_id, 
+	'CCommande'		as F_Type,
+	num(F_DateLivraisonPrevue) as %D,
+	if (num(F_DateLivraisonPrevue)<num(today()), 1, 0) as F_CC_EnRetard,
+	if (month(F_DateLivraisonPrevue)=month(today()) and year(F_DateLivraisonPrevue)=year(today()),
+			'M0', 
+			if (month(F_DateLivraisonPrevue)=month(addmonths(today(),1)) and year(F_DateLivraisonPrevue)=year(addmonths(today(),1)),
+					'M1', 
+					if (month(F_DateLivraisonPrevue)=month(addmonths(today(),2)) and year(F_DateLivraisonPrevue)=year(addmonths(today(),2)),
+							'M2', 
+							if (month(F_DateLivraisonPrevue)=month(addmonths(today(),3)) and year(F_DateLivraisonPrevue)=year(addmonths(today(),3)),
+									'M3',
+									null()
+							)
+					)
+			)
+	) as F_CCommmande_Mois,
+	F_PrixVteUnitaire * F_QuantiteDejaAllouee		as F_MontantDejaAlloue_CLI, 
+	F_PrixVteUnitaire * F_QuantiteLivreeNonFacturee	as F_MontantLivreNonFacture_CLI, 
+	F_PrixVteUnitaire * F_QuantiteCommandee			as F_MontantCommande_CLI, 
+	F_PrixVteUnitaire * F_QuantitePrelevee			as F_MontantPreleve_CLI, 
+	F_PrixVteUnitaire * F_QuantiteRestantALivrer	as F_MontantRestantALivrer_CLI,
+	F_PrixVteUnitaire / F_TauxClientCompta * F_QuantiteDejaAllouee			as F_MontantDejaAlloue_SOC, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_QuantiteLivreeNonFacturee	as F_MontantLivreNonFacture_SOC, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_QuantiteCommandee			as F_MontantCommande_SOC, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_QuantitePrelevee				as F_MontantPreleve_SOC, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_QuantiteRestantALivrer		as F_MontantRestantALivrer_SOC,
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoZone * F_QuantiteDejaAllouee		as F_MontantDejaAlloue_ZONE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoZone * F_QuantiteLivreeNonFacturee	as F_MontantLivreNonFacture_ZONE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoZone * F_QuantiteCommandee			as F_MontantCommande_ZONE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoZone * F_QuantitePrelevee			as F_MontantPreleve_ZONE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoZone * F_QuantiteRestantALivrer		as F_MontantRestantALivrer_ZONE,
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoGroupe * F_QuantiteDejaAllouee			as F_MontantDejaAlloue_GROUPE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoGroupe * F_QuantiteLivreeNonFacturee	as F_MontantLivreNonFacture_GROUPE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoGroupe * F_QuantiteCommandee			as F_MontantCommande_GROUPE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoGroupe * F_QuantitePrelevee				as F_MontantPreleve_GROUPE, 
+	F_PrixVteUnitaire / F_TauxClientCompta * F_TauxConsoGroupe * F_QuantiteRestantALivrer		as F_MontantRestantALivrer_GROUPE
+
+RESIDENT temp_CarnetCommande
+WHERE tempFlagLignePresente=1;//On ne prend pas les entêtes sans ligne (cas ou les lignes ne rentrent pas dans nos critères de sélection au chargement)
+
+DROP TABLE temp_CarnetCommande;
+DROP FIELD tempFlagLignePresente;
+///$tab M3_Budget Montant
+Budget_Montant_M3:
+CrossTable(Mois, [Montant_Budget], 15)
+LOAD 
+	 Year 		as Year_Budget,     
+     Affiliate 	as F_CodeSociete, 
+     OEM, 
+     Cust.Desc., 
+     (Cust.Ref.) as temp_%ClientPayeur_ID,
+     
+     DAS as BUDGET_DAS, 
+     Techno as F_CodeTechno, 
+     ([EFI Part Ref.]) as  ITNO,
+     
+     [EFC Part Desc.], 
+     Unit, 
+     (Warehouse) as BUDGET_CodeDepot, 
+     Secured, 
+     SOP, 
+     Currency, 
+     [Redesign 2014],
+
+     [Ventes 01], 
+     [Ventes 02], 
+     [Ventes 03], 
+     [Ventes 04], 
+     [Ventes 05], 
+     [Ventes 06], 
+     [Ventes 07], 
+     [Ventes 08], 
+     [Ventes 09], 
+     [Ventes 10], 
+     [Ventes 11], 
+     [Ventes 12]
+FROM
+[$(vFolderReferentialsUsers)Budget\Budget_M3*.xlsx]
+(ooxml, embedded labels, header is 1 lines, table is BdD);
+
+NoConcatenate
+
+temp_Budget_Montant_M3:
+LOAD
+	*,
+	
+	BUDGET_CodeDepot as F_CodeDepot,
+	ApplyMap('MAP_WHLO_FACI_M3',BUDGET_CodeDepot) as F_Etablissement,
+	//Applymap('Map_WHLO_V12_M3',BUDGET_CodeDepot ,'NOK_WHLO') as F_CodeDepot,
+	ApplyMap('Map_Cust_Livre_Payeur',temp_%ClientPayeur_ID,'N/A') as ##_ClientPayeur_ID,
+	AutoNumberHash128(ITNO) 	as %Article_ID,
+	text(ITNO )					as F_ArticleCode, 
+	//ApplyMap('Map_Agent_Planning',trim(Warehouse)&'-'&text(ITNO),'N/A Agt') as F_Agent_Planning,
+
+	'BV_'&rowno()			as F_id,
+	'Budget Montant'			as F_Type,
+
+	//if (F_CodeSociete<>'001',
+		//ApplyMap('Map_Cust_CustGroup',F_CodeSociete&'-'&temp_%ClientPayeur_ID, 'N/A'),
+
+		//ApplyMap('Map_Cust_CustGroup_M3',trim(temp_%ClientPayeur_ID), 'N/A') 			 		as F_GroupeClient,  
+		ApplyMap('Map_Cust_CD_CustGroup_M3',trim(temp_%ClientPayeur_ID), 'N/A') 			 		as F_GroupeClient,  
+
+	//if (F_CodeSociete<>'001',
+		//ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup',F_CodeSociete&'-'&temp_%ClientPayeur_ID, 'N/A'), 'N/A'),
+
+		//ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_M3',temp_%ClientPayeur_ID, 'N/A'), 'N/A')			 	as F_ClientPayeur_KeyAccount,  
+		ApplyMap('Map_Cust_LB_CustGroup_M3',ApplyMap('Map_Cust_CD_CustGroup_M3',temp_%ClientPayeur_ID, 'N/A'), 'N/A')			 	as F_ClientPayeur_KeyAccount,  
+
+	
+	num(makedate(Year_Budget, num(right(Mois,2)))) 		as %D,
+	//ApplyMap('Map_Societe_Zone',F_CodeSociete,'NA') 	as F_Zone, 
+	//ApplyMap('Map_Societe_Pays',F_CodeSociete,'NA') 	as F_Pays, 
+	makedate(Year_Budget, num(right(Mois,2))) 			as F_DateBudget,
+	Year_Budget		as F_AnneeBudget,
+	'EUR'			as F_DeviseGroupe,
+	ApplyMap('Map_Societe_DeviseZone',F_CodeSociete,'NA') 	as F_DeviseZone
+RESIDENT Budget_Montant_M3
+where 
+ num(F_CodeSociete) =3 and num(Year_Budget)&num(right(Mois,2),00) >= 201506 // Prendre en compte que la société 003 -------> mettre les autres sociétés dans le filtre en cas de migration
+;
+
+
+drop table Budget_Montant_M3;
+
+LEFT JOIN (temp_Budget_Montant_M3)
+LOAD 
+     CCDIVI as F_CodeSociete, 
+     CCLOCD as F_DeviseSociete
+FROM
+[$(vFolderM3)CMNDIV.QVD]
+(qvd);
+
+LEFT JOIN (temp_Budget_Montant_M3)
+LOAD distinct
+	DB_Year		as F_AnneeBudget,
+	DB_FromCurr	as F_DeviseSociete,
+	DB_ToCurr	as F_DeviseGroupe,
+	DB_Rate		as F_TauxBudgetGroupe
+RESIDENT Devises_Budget;
+
+LEFT JOIN (temp_Budget_Montant_M3)
+LOAD distinct
+	DB_Year		as F_AnneeBudget,
+	DB_FromCurr	as F_DeviseSociete,
+	DB_ToCurr	as F_DeviseZone,
+	DB_Rate		as F_TauxBudgetZone
+RESIDENT Devises_Budget;
+
+
+Concatenate (M3_FAITS)
+//join (V12_FAITS)
+LOAD 
+	*,
+	text(temp_%ClientPayeur_ID) 	as %ClientPayeur_ID, 
+	F_CodeSociete 			as %Societe_ID,
+	Montant_Budget 			as F_MontantBudget_SOC, // modification Bugdet par Montant_Budget --> MAL
+
+	//if (F_ClientPayeur_KeyAccount='GROUP', '$(vLibInternalSales)','$(vLibExternalSales)') 	as F_FlagInterco, 
+	if (ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_M3',trim(temp_%ClientPayeur_ID), 'N/A'), 'N/A')='GROUP', '$(vLibInternalSales)','$(vLibExternalSales)') 	as F_FlagInterco, 
+	Montant_Budget * F_TauxBudgetZone 		as F_MontantBudget_ZONE,
+	Montant_Budget * F_TauxBudgetGroupe 	as F_MontantBudget_GROUPE
+
+RESIDENT temp_Budget_Montant_M3;
+
+
+DROP TABLE temp_Budget_Montant_M3;
+
+//DROP Field temp_%ClientPayeur_ID; 
+///$tab M3_Budget Volume
+Budget_Volume_M3:
+CrossTable(Mois, [Volume_Budget], 15)
+LOAD 
+	 Year 		as Year_Budget,     
+     Affiliate 	as F_CodeSociete, 
+     OEM, 
+     Cust.Desc., 
+     (Cust.Ref.) as temp_%ClientPayeur_ID, 
+     
+     
+     DAS as BUDGET_DAS, 
+     Techno as F_CodeTechno, 
+     ([EFI Part Ref.]) as  ITNO, 
+     [EFC Part Desc.], 
+     Unit, 
+     (Warehouse) as BUDGET_CodeDepot, 
+     Secured, 
+     SOP, 
+     Currency, 
+     [Redesign 2014],
+ 
+     [Volume 01], 
+     [Volume 02], 
+     [Volume 03], 
+     [Volume 04], 
+     [Volume 05], 
+     [Volume 06], 
+     [Volume 07], 
+     [Volume 08], 
+     [Volume 09], 
+     [Volume 10], 
+     [Volume 11], 
+     [Volume 12]
+FROM
+[$(vFolderReferentialsUsers)Budget\Budget_M3*.xlsx]
+(ooxml, embedded labels, header is 1 lines, table is BdD);
+
+NoConcatenate
+
+temp_Budget_Volume_M3:
+LOAD
+	*,
+	if(F_CodeSociete = '003' and num(Year_Budget)&num(right(Mois,2),00) >= 201506,'M3_US','M3_NC') as F_FLAG_BUDGET_V12_M3,
+	BUDGET_CodeDepot as F_CodeDepot,
+	ApplyMap('MAP_WHLO_FACI_M3',BUDGET_CodeDepot) as F_Etablissement,
+	//Applymap('Map_WHLO_V12_M3',BUDGET_CodeDepot ,'NOK_WHLO') as F_CodeDepot,
+	ApplyMap('Map_Cust_Livre_Payeur',temp_%ClientPayeur_ID,'N/A') as ##_ClientPayeur_ID,
+	AutoNumberHash128(ITNO) as %Article_ID,
+	text(ITNO )					as F_ArticleCode, 
+	//ApplyMap('Map_Agent_Planning',trim(Warehouse)&'-'&text(ITNO),'N/A Agt') as F_Agent_Planning,
+	
+	
+	
+	'BV_'&rowno()			as F_id,
+	'Budget Volume'			as F_Type,
+	
+
+	//if (F_CodeSociete<>'001',
+		//ApplyMap('Map_Cust_CustGroup_M3',trim(temp_%ClientPayeur_ID), 'N/A') 			 		as F_GroupeClient,  
+		ApplyMap('Map_Cust_CD_CustGroup_M3',trim(temp_%ClientPayeur_ID), 'N/A') 			 		as F_GroupeClient,  
+
+	//if (F_CodeSociete<>'001',
+		//ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup',F_CodeSociete&'-'&temp_%ClientPayeur_ID, 'N/A'), 'N/A'),
+
+		//ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_M3',temp_%ClientPayeur_ID, 'N/A'), 'N/A')			 	as F_ClientPayeur_KeyAccount,  
+		ApplyMap('Map_Cust_LB_CustGroup_M3',ApplyMap('Map_Cust_CD_CustGroup_M3',temp_%ClientPayeur_ID, 'N/A'), 'N/A')			 	as F_ClientPayeur_KeyAccount,  
+
+
+	
+	num(makedate(Year_Budget, num(right(Mois,2)))) 		as %D,
+	//ApplyMap('Map_Societe_Zone',F_CodeSociete,'NA') 	as F_Zone, 
+	//ApplyMap('Map_Societe_Pays',F_CodeSociete,'NA') 	as F_Pays, 
+	makedate(Year_Budget, num(right(Mois,2))) 			as F_DateBudget,
+	Year_Budget		as F_AnneeBudget,
+	'EUR'			as F_DeviseGroupe,
+	ApplyMap('Map_Societe_DeviseZone',F_CodeSociete,'NA') 	as F_DeviseZone
+RESIDENT Budget_Volume_M3
+where num(F_CodeSociete) =3 and num(Year_Budget)&num(right(Mois,2),00) >= 201506// and num(Year_Budget)&num(right(Mois,2),00) >= 201506)
+;
+
+
+DROP TABLE Budget_Volume_M3;
+
+
+LEFT JOIN (temp_Budget_Volume_M3)
+LOAD 
+     CCDIVI as F_CodeSociete, 
+     CCLOCD as F_DeviseSociete
+FROM
+[$(vFolderM3)CMNDIV.QVD]
+(qvd);
+
+// Pas besoin des devises pour les quantités
+
+LEFT JOIN (temp_Budget_Volume_M3)
+LOAD distinct
+	DB_Year		as F_AnneeBudget,
+	DB_FromCurr	as F_DeviseSociete,
+	DB_ToCurr	as F_DeviseGroupe,
+	DB_Rate		as F_TauxBudgetGroupe
+RESIDENT Devises_Budget;
+
+LEFT JOIN (temp_Budget_Volume_M3)
+LOAD distinct
+	DB_Year		as F_AnneeBudget,
+	DB_FromCurr	as F_DeviseSociete,
+	DB_ToCurr	as F_DeviseZone,
+	DB_Rate		as F_TauxBudgetZone
+RESIDENT Devises_Budget;
+
+
+Concatenate (M3_FAITS)
+//join (V12_FAITS)
+LOAD 
+	*,
+	text(temp_%ClientPayeur_ID) 	as %ClientPayeur_ID, 
+
+	F_CodeSociete 			as %Societe_ID,
+	[Volume_Budget] 		as F_QuantiteBudget, //remplacer Budget par [Budget 2015 EFI] --> MAL
+	//if (F_ClientPayeur_KeyAccount='GROUP', '$(vLibInternalSales)','$(vLibExternalSales)') 	as F_FlagInterco 
+	if (ApplyMap('Map_CustGroup_KA',ApplyMap('Map_Cust_CustGroup_M3',trim(temp_%ClientPayeur_ID), 'N/A'), 'N/A')='GROUP', '$(vLibInternalSales)','$(vLibExternalSales)') 	as F_FlagInterco 
+
+RESIDENT temp_Budget_Volume_M3;
+
+
+DROP TABLE temp_Budget_Volume_M3;
+
+//DROP Field temp_%ClientPayeur_ID; 
+///$tab FINALISATION FAITS
+FAITS:
+load * ,
+	'M3' 			as F_M3_V12,
+	%ClientPayeur_ID&'M3' as #KEY_FAITS_CLIENT,
+	%Article_ID&'M3' as #KET_FAITS_ARTICLES,
+	ApplyMap('Map_Societe_Zone',F_CodeSociete,'NA')			as F_Zone, 
+	ApplyMap('Map_Societe_Pays',F_CodeSociete,'NA')			as F_Pays, 
+	//ApplyMap('Map_Societe_DeviseZone',F_CodeSociete,'NA')	as F_DeviseZone,
+	//ApplyMap('Map_Article_Techno_M3',F_ArticleCode,'Undefined Techno')	as F_CodeTechno,
+	if(F_CodeSociete&'-'&F_CodeDepot <> '001-510','NO','YES') as Extra_T,
+	ApplyMap('Map_Agent_Planning_M3',(text(F_CodeDepot))&'-'&text(F_ArticleCode),'N/A Agt') 	as F_Agent_Planning
+
+
+resident M3_FAITS;
+
+Concatenate
+
+load *,
+	'V12' 					as F_M3_V12,
+	%ClientPayeur_ID&'V12' 	as #KEY_FAITS_CLIENT,
+	%Article_ID&'V12' 		as #KET_FAITS_ARTICLES,
+	F_CodeDepot_V12 		as F_CodeDepot,
+	F_Etablissement_V12 	as F_Etablissement,
+	if(F_CodeSociete&'-'&F_CodeDepot_V12 <> '001-541','NO','YES') as Extra_T,
+	ApplyMap('Map_Agent_Planning',trim(F_CodeDepot_V12)&'-'&text(F_ArticleCode),'N/A Agt') as F_Agent_Planning
+Resident V12_FAITS;
+
+drop table V12_FAITS;
+drop table M3_FAITS;
+
+drop table Devises_Conso;
+drop table Devises_Budget;
+
+//DROP Field F_id;
+DROP Field temp_UBITNO;
+DROP Field temp_UTAIT3;
+///$tab M3_Clients
+//CLIENTPAYEUR:
+//LOAD 
+//
+//	//'CLIENTPAYEUR' as #Origine_Client, // MAL 03/03/15
+//	text(OKCUNO) as %Client_ID,
+//	ApplyMap('Map_Cust_CD_CustGroup_M3',OKCUNO,'N/A') as ClientPayeur_CD_CUCL,
+//	ApplyMap('Map_Cust_LB_CustGroup_M3',ApplyMap('Map_Cust_CD_CustGroup_M3',OKCUNO,'N/A'),'N/A') as ClientPayeur_LB_CUCL,
+//	text(OKCUNO) as %ClientPayeur_ID,
+//	text(OKCUNO) as ClientPayeur_Code,
+////	text(OKCUCL) as ClientPayeur_GroupeClient,
+//	text(OKCUNM) as ClientPayeur_Nom,
+//	text(OKSDST) as ClientPayeur_CodeMarche,
+//	text(OKCSCD) as ClientPayeur_CodeCommercial,
+//	text(OKACRF) as ClientPayeur_CtrObjComptable,
+//	if (left(text(OKSDST),1)='R',
+//		'After market',
+//		if (left(text(OKSDST),1)='M',
+//			'Manufacturer',
+//			'To define'
+//		)
+//	)			as ClientPayeur_Type,
+//	OKSDST 		
+//FROM
+//[$(vFolderM3)OCUSMA.QVD]
+//(qvd)
+//WHERE exists(%ClientPayeur_ID, text(OKCUNO));
+//
+//CLIENTLIVRE:
+//LOAD 
+//	//'CLIENTLIVRE' as #Origine_Client, // MAL 03/03/15
+//
+//	text(OKCUNO) as %ClientLivre_ID,
+//	text(OKCUNO) as ClientLivre_Code,
+////	text(OKCUCL) as ClientLivre_GroupeClient,
+////	ApplyMap('Map_CustGroup_KA',text(OKCUCL), 'N/A') as ClientLivre_KeyAccount, 
+//	text(OKCUNM) as ClientLivre_Nom,
+//	text(OKSDST) as ClientLivre_CodeMarche,
+//	//text(OKCSCD) as ClientLivre_CodeCommercial,
+//	text(OKACRF) as ClientLivre_CtrObjComptable,
+//	text(OKCSCD) as [Pays client]
+//	
+//FROM
+//[$(vFolderM3)OCUSMA.QVD]
+//(qvd)
+//WHERE exists(%ClientLivre_ID, text(OKCUNO));
+///$tab M3_Calendrier
+
+CALENDRIER:
+LOAD distinct
+	%D,
+	date(%D) as Cal_Date,
+	Day(%D) as Cal_Jour,
+	Month(%D) as Cal_Mois,
+	num(Month(%D)) as Cal_MoisNum,
+	'Q' & Ceil(Month(%D)/3) as Cal_Trimestre,
+	if (Year(%D)>=year(today())-1, Year(%D)) as Cal_AnneeSel, //Pour ne pas faire apparaitre N-2 dans les sélections
+	Year(%D) as Cal_Annee,
+	Year(%D)-1 as Cal_Annee_1,
+	Year(%D) & '-' & right('0'&num(Month(%D)),2) as Cal_AnneeMois,
+	if (Month(%D)=1,
+		Year(%D)-1 & '-' & 12,
+		Year(%D) & '-' & right('0'&(num(Month(%D))-1),2)		
+	) as Cal_AnneeMois_1,
+	if (Month(%D)<=2,
+		Year(%D)-1 & '-' & right('0'&num(Month(%D))+10,2),
+		Year(%D) & '-' & right('0'&(num(Month(%D))-2),2)		
+	) as Cal_AnneeMois_2
+RESIDENT FAITS
+
+;
+///$tab AdHoc
+AH_DIMENSIONS:
+LOAD * INLINE [
+AH_DimensionCode,AH_Dimension_FR, AH_Dimension_EN, AH_Dimension_ES, AH_Dimension_TR, AH_Dimension_CN
+AH01,Année,Year,Year,Year,Year
+AH02,Mois,Month ,Month,Month,Month
+AH03,Jour,Day,Day,Day,Day
+AH04,Compte clé,Key account,Key account,Key account,Key account
+AH05,Groupe client,Customer group,Customer group,Customer group,Customer group
+AH06,Code client Payeur,Customer code,Customer code,Customer code,Customer code
+AH07,Client Payeur,Customer,Customer,Customer,Customer
+AH08,Pays client,Customer country,Customer country,Customer country,Customer country
+AH09,Type Marché, Market Type,Market Type,Market Type,Market Type
+AH10, Ligne de Prod, Prod Line, Prod Line, Prod Line, Prod Line
+AH11,DAS,DAS,DAS,DAS,DAS
+AH12,Techno,Techno,Techno,Techno,Techno
+AH13,Code produit,Product code,Product code,Product code,Product code
+AH14,Produit,Product,Product,Product,Product
+AH15,Compte comptable,Account,Account,Account,Account
+AH16,Section analytique,Cost center,Cost center,Cost center,Cost center
+AH17,Devise de facturation,Billing currency,Billing currency,Billing currency,Billing currency
+AH18,Interco,Interco,Interco,Interco,Interco
+AH19,Société,Entity,Entity,Entity,Entity
+AH20, Dépot, Warehouse,Warehouse, Warehouse, Warehouse
+AH21, No Facture, No Invoice,No Invoice, No Invoice, No Invoice
+AH22, No L Commande, No L Order, No L Order, No L Order, No L Order
+AH23,Client Livré, Delivery Customer, Delivery Customer,Delivery Customer, Delivery Customer
+AH24,Code Client Livré, Delivery Customer code, Delivery Customer code,Delivery Customer code, Delivery Customer code
+];
+
+AH_EXPRESSIONS:
+LOAD * INLINE [
+AH_ExpressionCode,AH_Expression_FR, AH_Expression_EN				,AH_Expression_ES				,AH_Expression_TR				,AH_Expression_CN
+AH01,Chiffres d'affaires			,Turnover						,Turnover						,Turnover						,Turnover
+AH05,Volume							,Volume							,Volume							,Volume							,Volume
+AH06,Montant déjà alloué			,Amount already allocated		,Montant déjà alloué			,Montant déjà alloué			,Montant déjà alloué
+AH07,Montant livré non facturé		,Unbilled delivered amount		,Montant livré non facturé		,Montant livré non facturé		,Montant livré non facturé
+AH08,Montant commandé				,Orderd amount					,Montant commandé				,Montant commandé				,Montant commandé
+AH09,Montant prélevé				,Collected amount				,Montant prélevé				,Montant prélevé				,Montant prélevé 
+AH10,Montant restant à livrer		,To be delivered amount			,Montant restant à livrer		,Montant restant à livrer		,Montant restant à livrer
+AH11,Quantité déjà allouée			,Quantity already allocated		,Quantité déjà allouée			,Quantité déjà allouée			,Quantité déjà allouée
+AH12,Quantité livrée non facturée	,Unbilled delivered quantity	,Quantité livrée non facturée	,Quantité livrée non facturée	,Quantité livrée non facturée
+AH13,Quantité commandée				,Ordered quantity				,Quantité commandée				,Quantité commandée				,Quantité commandée 
+AH14,Quantité prélevée				,Collected quantity				,Quantité prélevée				,Quantité prélevée				,Quantité prélevée
+AH15,Quantité restant à livrer		,To be delivered quantity		,Quantité restant à livrer		,Quantité restant à livrer		,Quantité restant à livrer
+AH16,Montant en retard				,In late amount					,Montant en retard				,Montant en retard				,Montant en retard
+AH17,Quantité en retard				,In late quantity				,Quantité en retard				,Quantité en retard				,Quantité en retard
+AH19,MT Budget						,Budget Amount					,Budget Amount					,Budget Amount					,Budget Amount
+AH20,Vol Budget						,Budget Volume					,Budget Volume					,Budget Volume					,Budget Volume
+];
+///$tab PIC
+PIC_AH_DIMENSIONS:
+LOAD * INLINE [
+PIC_AH_DimensionCode,PIC_AH_Dimension_FR, PIC_AH_Dimension_EN, PIC_AH_Dimension_ES, PIC_AH_Dimension_TR, PIC_AH_Dimension_CN
+AH01,Année,Year,Year,Year,Year
+AH02,Mois,Month ,Month,Month,Month
+AH03,Jour,Day,Day,Day,Day
+AH04,Compte clé,Key account,Key account,Key account,Key account
+AH05,Groupe client,Customer group,Customer group,Customer group,Customer group
+AH06,Code client,Customer code,Customer code,Customer code,Customer code
+AH07,Client,Customer,Customer,Customer,Customer
+AH08,Pays client,Customer country,Customer country,Customer country,Customer country
+AH09, Type Marché, Market Type,Market Type,Market Type,Market Type
+AH11,DAS,DAS,DAS,DAS,DAS
+AH12,Techno,Techno,Techno,Techno,Techno
+AH13,Code produit,Product code,Product code,Product code,Product code
+AH14,Produit,Product,Product,Product,Product
+AH15,Client livré,Delivered Customer,Delivered Customer,Delivered Customer,Delivered Customer
+AH16,Section analytique,Cost center,Cost center,Cost center,Cost center
+AH17,Devise de facturation,Billing currency,Billing currency,Billing currency,Billing currency
+AH18,Interco,Interco,Interco,Interco,Interco
+AH19,Société,Division,Division,Division,Division
+AH20, Dépot, Warehouse,Warehouse, Warehouse, Warehouse
+AH21, No Facture, No Invoice,No Invoice, No Invoice, No Invoice
+AH22, Ligne de Prod, Prod Line, Prod Line, Prod Line, Prod Line
+AH23, Code Client livré, Delivered Customer Code, Delivered Customer Code, Delivered Customer Code,Delivered Customer Code
+AH24, Statut Article, Article Status,Article Status,Article Status,Article Status
+AH25, Code Acquisition, Acquisition Code,Acquisition Code,Acquisition Code,Acquisition Code
+];
+
+PIC_AH_EXPRESSIONS:
+LOAD * INLINE [
+PIC_AH_ExpressionCode,PIC_AH_Expression_FR, PIC_AH_Expression_EN, PIC_AH_Expression_ES, PIC_AH_Expression_TR, PIC_AH_Expression_CN
+AH01,Chiffres d'affaires,Turnover,Turnover,Turnover,Turnover
+AH05,Volume,Volume,Volume,Volume,Volume
+AH19,MT Budget,Budget Amount,Budget Amount,Budget Amount,Budget Amount
+AH20,Vol Budget,Budget Volume,Budget Volume,Budget Volume,Budget Volume
+];
+
+// MIS DANS AH05 :
+//AH11,Quantité déjà allouée,Quantité déjà allouée,Quantité déjà allouée,Quantité déjà allouée,Quantité déjà allouée
+//AH12,Quantité livrée non facturée,Quantité livrée non facturée,Quantité livrée non facturée,Quantité livrée non facturée,Quantité livrée non facturée
+//AH14,Quantité prélevée,Quantité prélevée,Quantité prélevée,Quantité prélevée,Quantité prélevée
+//AH15,Quantité restant à livrer,Quantité restant à livrer,Quantité restant à livrer,Quantité restant à livrer,Quantité restant à livrer
+//AH17,Quantité en retard,Quantité en retard,Quantité en retard,Quantité en retard,Quantité en retard
+
+
+//MIS DANS AH01 :
+//AH06,Montant déjà alloué,Montant déjà alloué,Montant déjà alloué,Montant déjà alloué,Montant déjà alloué
+//AH07,Montant livré non facturé,Montant livré non facturé,Montant livré non facturé,Montant livré non facturé,Montant livré non facturé
+//AH09,Montant prélevé,Montant prélevé,Montant prélevé,Montant prélevé,Montant prélevé 
+//AH10,Montant restant à livrer,Montant restant à livrer,Montant restant à livrer,Montant restant à livrer,Montant restant à livrer
+//AH16,Montant en retard,Montant en retard,Montant en retard,Montant en retard,Montant en retard
+
+//AH08,Montant commandé,Montant commandé,Montant commandé,Montant commandé,Montant commandé
+
+//AH13,Quantité commandée,Quantité commandée,Quantité commandée,Quantité commandée,Quantité commandée 
+

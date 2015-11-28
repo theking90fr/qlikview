@@ -1,0 +1,790 @@
+﻿///$tab Main
+SET ThousandSep=' ';
+SET DecimalSep=',';
+SET MoneyThousandSep=' ';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='# ##0,00 €;-# ##0,00 €';
+SET TimeFormat='hh:mm:ss';
+SET DateFormat='DD/MM/YYYY';
+SET TimestampFormat='DD/MM/YYYY hh:mm:ss[.fff]';
+SET MonthNames='Jan.;Feb.;Mar.;Apr.;May;June;Jul.;Aug.;Sep.;Oct.;Nov.;Dec.';
+SET DayNames='lun.;mar.;mer.;jeu.;ven.;sam.;dim.';
+
+//SET HidePrefix = '%';
+
+//Paramétrage de l'application
+SET vLanguage = FR;
+LET vProfondeurHisto = month(today())+24;
+
+SET vAppName = 'Achats';
+
+//Variables de répertoires
+SET vFolderDataStore = ..\..\DataStore\;
+SET vFolderReferentials = $(vFolderDataStore)Referentials\$(vAppName)\;
+SET vFolderReferentialsIT = $(vFolderReferentials)IT\;
+SET vFolderReferentialsUsers = $(vFolderReferentials)Users\;
+
+SET vFolderTemp=$(vFolderDataStore)Temp\;
+SET vFolderTransform=$(vFolderDataStore)Transform\;
+
+SET vEnvironnementSource = Prod;
+SET vEnvironnementSourceM3 = PRD;
+
+SET vFolderExtract = $(vFolderDataStore)Extract\;
+
+SET vFolderV12 = $(vFolderExtract)V12\$(vEnvironnementSource)\;
+SET vFolderV12Split = $(vFolderV12)Split\;
+
+SET vFolderM3 = $(vFolderExtract)M3\$(vEnvironnementSource)\;
+SET vFolderM3Split = $(vFolderM3)Split\;
+
+SET vFolderP03 = $(vFolderExtract)SQL\P03\;
+
+SET vFolderINFOCENTRE = $(vFolderExtract)INFOCENTRE\;
+
+LET vProfondeurHisto = month(today())+24;
+LET vYearMin = year(today())-2;
+
+//Variables de couleurs
+LET vColorTitle = rgb(229,52,44);
+LET vColorButtonOn = LightGreen();
+LET vColorButtonOff = LightGray();
+LET vColorLabels = rgb(57,186,191);
+LET vColorLabels = rgb(40,136,138);
+
+//Variables de menus
+LET vActiveMenu = 1;
+
+	
+//Chargement des libellés dans les différentes langues
+%TRADUCTION:
+LOAD Code as LanguageCode, 
+     FR, 
+     EN, 
+     ES, 
+     TR, 
+     CN
+FROM
+[$(vFolderReferentialsIT)REF_Language.xlsx]
+(ooxml, embedded labels, table is CA);
+
+SET vLanguage = FR;
+LET vFuncTrad = 'minstring({<LanguageCode = {$1}>} '&'$'&'(vLanguage)'&')';
+
+SET vDevise=GROUPE;
+SET vLibExternalSales=External sales;
+SET vLibInternalSales=Internal sales;
+
+DIM_UNITES:
+LOAD * INLINE [
+%DimUnite, %DimUniteFacteur
+Units, 1
+KUnits, 1000
+MUnits, 1000000
+];
+///$tab Versionning
+
+%VERSION:
+LOAD * INLINE [
+%Version_No, %Version_Desc, %Version_Qui
+'0.01', Version initiale, Maaven
+'0.02', Modification Comptes, MAL
+];
+///$tab Calendrier
+UNQUALIFY *;
+Quarters:
+Load 
+	RowNo() 				as NUM_MONTH,
+	'Q'& ceil(RowNo()/3) 	as QUARTER
+	AutoGenerate(12);
+	
+
+
+
+// Définir les Dates Min et Max
+Let vMinDate = Num(Makedate(Year(Now())-3,1,1)); 
+Let vMaxDate = Num(Makedate(Year(Now()),Month(Now()),Day(Now())));
+
+//LET vMinDate = Num(peek('VentesDate',0,'Ventes'));
+//LET vMaxDate = Num(peek('VentesDate',-1,'Ventes'));
+
+// Générer toutes les dates possibles entre la date Min et la Date Max
+ChampDate:
+LOAD date($(vMinDate)+IterNo()-1) AS MaDate
+AUTOGENERATE (1) 
+WHILE $(vMinDate)+IterNo()-1<= $(vMaxDate);
+
+// Créer une table Calendrier qui va contenir les différentes représentations des dates
+CALENDRIER:
+LOAD
+	MaDate 										as Date,
+	MaDate 										as %MaDate,
+	Year(MaDate) 								as Year,
+	'Q ' & Num(Ceil(Month(MaDate)/3),'(ROM)0') 	as Quarter,
+	Month(MaDate) 								as Month,
+	Month(AddMonths(Today(),-1)) 				as 'Month-1',
+	Year(AddMonths(Today(),-1)) 				as 'Year-1',
+	Year(MaDate)&Num(Month(MaDate),00) 			as AAAAMM,
+	//Year(MaDate)&Num(Month(MaDate),00) 			as AAAAMM_PRODUCTIVITE,
+	MonthEnd(MaDate)							as MonthEnd,
+	num(Week(MaDate),00) 						as Week,
+	num(Weekday(MaDate),00) 					as Weekday,
+	num(Day(MaDate),00) 						as Day
+RESIDENT ChampDate;
+
+//supprimer la table ChampDate
+DROP TABLE ChampDate;
+
+//Supprimer les variables vMinDate et vMaxDate
+SET vMinDate = ;
+SET vMaxDate = ;
+///$tab V12
+//// NON FONCTIONNEL
+
+
+//ACHATS_CONTRATS:
+////MPAGRH: // entete
+//LOAD AHAGNB as C_No_Contrat, 
+//     AHAGRD as C_DT_Debut_Contrat, 
+//     AHAGTP	as C_Type_Contrat, 
+//     AHBUYE	as C_Acheteur, 
+//     AHCUCD	as C_Devise, 
+//    // AHFVDT	as C_DT_Debut_Validite, 
+//    // MakeDate(num(left(AHFVDT,4)),num(right(left(AHFVDT,6),2)),num(right(AHFVDT,2)))	as %MaDate1, // jointure Date
+//     //MakeDate(num(left(AHUVDT,4)),num(right(left(AHUVDT,6),2)),num(right(AHUVDT,2)))	as DT_FIN,
+//     //Date(Date#(AHUVDT,'YYYYMMDD')) as DT_FIN_2,
+//     AHPAST	as C_Statut_Entete, 
+//     //AHRNDT	as C_DT_Renouvellement, 
+//     AHSUNO	as C_Fournisseur_Code, 
+//     //AHUVDT	as C_DT_Fin_Validite, 
+//     AHWHLO	as C_Depot_Code
+//FROM
+//[$(vFolderV12)MPAGRH.QVD]
+//(qvd)
+//WHERE AHPAST = '40'		// statut contrat actif
+//and  MakeDate(num(left(AHFVDT,4)),num(right(left(AHFVDT,6),2)),num(right(AHFVDT,2))) <= Date(today())
+//and ( 		(trim(AHUVDT) = '99999999')  
+//		or 	(Date(Date#(AHUVDT,'YYYYMMDD')) > date(today()))  
+//		or 	(Exists(trim(AHUVDT))) 
+//		or 	(len(trim(AHUVDT))  = 0) 
+//	) // récupérer les contrans en cours de validitée avec date debut <= date du jour et date fin de validité = 99999% ou superieur à la date du jour
+//	
+//	and AHWHLO < 900
+//
+//;
+//inner  join
+//MPAGRL:
+//LOAD AIAGNB	as C_No_Contrat, 
+//    // AIAGPT	as C_Type_Contrat, 
+//     AIFVDT	as C_LGN_DT_Debut_Validite, 
+//     if(len(trim(AIOBV1))<11,AIOBV2, AIOBV1)	as C_Article_Code, // modif AXS
+//     AISUNO	as C_Fournisseur_Code, 
+//     AIUVDT	as C_LGN_DT_Fin_Validite
+//FROM
+//[$(vFolderV12)MPAGRL.QVD]
+//(qvd)
+//where  
+//MakeDate(num(left(AIFVDT,4)),num(right(left(AIFVDT,6),2)),num(right(AIFVDT,2))) <= Date(today())
+//and ( 		(trim(AIUVDT) = '99999999')  
+//		or 	(Date(Date#(AIUVDT,'YYYYMMDD')) > date(today()))  
+//		or 	(Exists(trim(AIUVDT))) 
+//		or 	(len(trim(AIUVDT))  = 0) 
+//	) // récupérer les contrans en cours de validitée avec date debut <= date du jour et date fin de validité = 99999% ou superieur à la date du jour
+//;
+//
+//inner join
+//
+//MPAGRP:
+//LOAD AJAGNB as C_No_Contrat, 
+//    if(len(trim(AJOBV1))<11,AJOBV2, AJOBV1)	as C_Article_Code, 
+//     AJPUPR	as C_PU_Achats, 
+//     AJSUNO	as C_Fournisseur_Code,
+//     AJFVDT as C_LGN_DT_Debut_Validite
+//FROM
+//[$(vFolderV12)MPAGRP.QVD]
+//(qvd)
+////where len(trim(AJOBV1)) > 3 // la 2e configuration de contrat ne permet pas cela
+//;
+//
+//Store ACHATS_CONTRATS into $(vFolderTransform)TRANSFORM_ACHATS_CONTRATS.qvd (qvd);
+//
+////MPAGRL:
+////LOAD AIAGNB	as C_No_Contrat_2, 
+////     AIAGPT	as C_Type_Contrat_2, 
+////     AIFVDT	as C_DT_Debut_Validite_2, 
+////     AIOBV1	as C_Article_Code_2, 
+////     AISUNO	as C_Fournisseur_Code_2, 
+////     AIUVDT	as C_DT_Fin_Validite_2
+////FROM
+////[$(vFolderV12)MPAGRL.QVD]
+////(qvd);
+///$tab CONTRATS : V12 SQL
+ODBC CONNECT TO [V12 PRD] (XUserId is XCCFXSFNTTEB, XPassword is FODbVSFNTDcB);
+
+set vNon_Depot ='901','902','903','020','961','UFI','114','131','133';
+
+CONTRATS_ACHATS_V12:
+load *;
+SQL 
+select 
+	AIAGNB			as C_No_Contrat, 
+	AHBUYE 			as C_Acheteur,
+	AHWHLO 			as C_Depot,
+	AIAGPT			as C_Type_Contrat,
+	AHAGRD 			as C_DT_Debut_Contrat, 
+	AHUVDT			as C_DT_Fin_Contrat,
+	AHFVDT 			as C_Date_Debut_Validite,
+	AIFVDT			as C_LGN_DT_Debut_Validite,
+	AIUVDT			as C_LGN_DT_Fin_Validite,
+	T1.ITEM_CODE	as C_Article_Code, 
+	AISUNO			as C_Fournisseur_Code, 
+	
+	AHCUCD			as C_Devise,
+	AJPUPR			as C_PU_Achats,
+	
+	T1.MAX_DATE 	as MAX_DATE_HEURE_SAISIE
+     FROM MPAGRL
+     inner join  
+(	select 	
+			(case when length(trim(L2.AIOBV1)) < 11 then L2.AIOBV2 else L2.AIOBV1 end) as ITEM_CODE,
+			max(cast(L2.airgdt as float)*1000000 + L2.airgtm)  as MAX_DATE,
+			H2.ahsuno as SUNO
+		from MPAGRh H2 
+		inner JOIN  MPAGRL L2 
+		on L2.aicono = H2.ahcono 
+		and L2.aisuno = H2.ahsuno 
+		and L2.aiagnb = H2.ahagnb 
+		and (L2.aifvdt <= year(now())*10000 + month(now())*100 + day(now())) 
+		and (L2.aiuvdt >= year(now())*10000 + month(now())*100 + day(now()) or L2.aiuvdt = 0)
+		where ahcono = 200 
+		and (ahfvdt <= year(now())*10000 + month(now())*100 + day(now()))  
+		and (ahuvdt >= year(now())*10000 + month(now())*100 + day(now()) or ahuvdt = 0)  
+		and ahpast = 40 
+		and AHWHLO not in ($(vNon_Depot))
+		--and  H2.ahagnb = '0500608'
+		--and case when length(trim(AIOBV1)) < 11 then AIOBV2 else AIOBV1 end like '0176F550000%'
+		group by (case when length(trim(L2.AIOBV1)) < 11 then L2.AIOBV2 else L2.AIOBV1 end),
+		H2.ahsuno
+		order by 1
+		
+		
+	) T1
+on T1.SUNO = AISUNO 
+and T1.ITEM_CODE = AIOBV1 --(case when length(trim(AIOBV1)) < 11 then AIOBV2 else AIOBV1 end)
+and T1.MAX_DATE = (cast(airgdt as float)*1000000 + airgtm)
+
+inner join MPAGRH on AHAGNB = AIAGNB and AHSUNO = AISUNO and aicono = ahcono 
+inner join MPAGRP on AJAGNB = AHAGNB and AJSUNO = AHSUNO and AJCONO = AHCONO
+and T1.ITEM_CODE = (case when length(trim(AJOBV1)) < 11 then AJOBV2 else AJOBV1 end) 
+and (AJFVDT) = (AIFVDT) 
+and ajrgdt = airgdt
+
+where aicono = 200
+--and T1.ITEM_CODE like '0176F550000%'
+and AHPAST = '40' // Statut Contrat fournisseur
+;
+
+Store CONTRATS_ACHATS_V12 into $(vFolderTransform)TRANSFORM__CONTRATS_ACHATS_V12.qvd (qvd);
+///$tab CONTRATS: M3
+// en attente des spec
+///$tab DROP
+//drop table ACHATS_CONTRATS;
+///$tab Mapping
+Map_Societe_Zone:
+MAPPING LOAD Société, 
+     Zone
+FROM
+[$(vFolderReferentialsIT)REF_Zones.xlsx]
+(ooxml, embedded labels, table is Data);
+
+Map_Societe_Pays:
+MAPPING LOAD Société, 
+     Pays
+FROM
+[$(vFolderReferentialsIT)REF_Zones.xlsx]
+(ooxml, embedded labels, table is Data);
+
+Map_Societe_DeviseZone:
+MAPPING LOAD Société, 
+     Devise as DeviseZone
+FROM
+[$(vFolderReferentialsIT)REF_Zones.xlsx]
+(ooxml, embedded labels, table is Data);
+
+MAP_COREFACH :
+MAPPING LOAD
+	num(CADIVI,'000')&'-'&CARACH,
+	CARREG
+FROM
+[$(vFolderINFOCENTRE)COREFACH.QVD]
+(qvd);
+
+Map_WHLO_FACI_M3:
+Mapping load 
+     if(FILD = 'WHLO',M3_DATA )	as WHLO_M3,
+	if(FILD = 'FACI',M3_DATA )	as FACI_M3
+
+FROM
+$(vFolderTransform)MAPPING_V12_M3.qvd
+(qvd)
+//where FILD = 'WHLO'
+;
+///$tab CORRECTION M3
+///$tab DEVISE
+//Devises de consolidation
+		temp_DevisesConso:
+		LOAD 
+			month(Date) 	as DC_Month, 
+			year(Date) 		as DC_Year, 
+			From_Curr 		as DC_FromCurr, 
+			To_Curr 		as DC_ToCurr, 
+			Rate 			as DC_Rate
+		FROM
+		[$(vFolderReferentialsUsers)REF_Devises_Conso.xlsx]
+		(ooxml, embedded labels, header is 1 lines, table is Data);
+		
+		//Par date, on récupère la liste des devises concernées (en From ou en To) pour créer les taux à 1.
+		temp_isoDevises:
+		LOAD Distinct
+			DC_Month,
+			DC_Year,
+			DC_FromCurr 	as DC_Curr
+		RESIDENT temp_DevisesConso;
+		Concatenate(temp_isoDevises)
+		LOAD Distinct
+			DC_Month,
+			DC_Year,
+			DC_ToCurr 	as DC_Curr
+		RESIDENT temp_DevisesConso;
+		
+		
+		Concatenate(temp_DevisesConso)
+		LOAD Distinct
+			DC_Month,
+			DC_Year,
+			DC_Curr 	as DC_FromCurr,
+			DC_Curr 	as DC_ToCurr,
+			1 			as DC_Rate
+		RESIDENT temp_isoDevises;
+		
+		DROP TABLE temp_isoDevises;
+		
+		temp_MinDate:
+		LOAD
+			min(makedate(DC_Year,DC_Month)) 	as minDate
+		RESIDENT temp_DevisesConso;
+		
+		LET vMinDate = num(peek('minDate',0,'temp_MinDate'));
+		DROP TABLE temp_MinDate;
+		
+		Devises_Conso:
+		LOAD 
+			date($(vMinDate) + IterNo() - 1) 	as DC_Date,
+			month($(vMinDate) + IterNo() - 1) 	as DC_Month,
+			year($(vMinDate) + IterNo() - 1) 	as DC_Year
+		AUTOGENERATE 1 WHILE ($(vMinDate) + IterNo() - 1) <= num(today());
+		
+		LEFT JOIN (Devises_Conso)
+		LOAD *
+		RESIDENT temp_DevisesConso;
+		
+		DROP TABLE temp_DevisesConso;
+
+//////////////////////
+DEVISE_V12:
+LOAD Distinct
+     CCDIVI , 
+     CCLOCD 
+//     'EUR' 	as F_DeviseGroupe,
+//     ApplyMap('Map_Societe_DeviseZone',CCDIVI,'NA')	as F_DeviseZone
+FROM
+[$(vFolderV12)CMNDIV.QVD]
+(qvd);
+///$tab LOAD FAIT M3
+
+set vNon_Depot_M3 ='190','192','191','109','191';
+
+FAITS_M3:
+LOAD
+	IACONO as F_CodeGroupe, // jointure
+	IAPUNO as F_NumOA, // jointure
+
+	'OAM3' as F_Type,
+	IABUYE	as F_Acheteur, 
+	IACUCD	as F_DeviseOA, 
+	IADIVI	as F_CodeSociete, 
+	IADIVI  as %Societe_ID, //Jointure
+	IAFACI	as F_Etablissement, 
+	IAORTY	as F_TypeOA, 
+	Monthstart(date(date#(IAPUDT,'YYYYMMDD')))		as F_DateCommande, // jointure
+	//date(date#(IAPUDT,'YYYYMMDD'))		as F_DateCommande, // MAL 27/04/2015 --> problème chiffre  donc passage en Monthstart
+	monthstart(date(date#(IAPUDT,'YYYYMMDD')))	as F_AnneeMoisCommande, // jointure
+	//left(IAPUDT,6) as F_AnneeMoisCommande, 
+	//makedate(left(IAPUDT,4),right(left(IAPUDT,6),2) ) as V12_TEST_ANNEEMOIS,
+	//IAPUDT as v12_IAPUDT,
+//	ApplyMap('Map_Societe_Zone',IADIVI,'NA')	as F_Zone, 
+//	ApplyMap('Map_Societe_Pays',IADIVI,'NA')	as F_Pays, 
+//	ApplyMap('Map_Societe_DeviseZone',IADIVI,'NA')	as F_DeviseZone,
+	 
+	IAPUSL 		as F_StatutBasOA, 
+	IAPUST 		as F_StatutHautOA, 
+	AutoNumberHash128(IASUNO) 	as %Fournisseur_id, // jointure
+	IASUNO 	as F_CodeFournisseur, 					// jointure
+	IAWHLO 	as F_CodeDepot 							// jointure
+FROM
+[$(vFolderM3)MPHEAD.QVD](qvd)
+Where //not WildMatch(IAWHLO,$(vNon_Depot_M3)) and 
+(num(IAPUST) <> 99) // MAL 27/04/2015 
+and year(Monthstart(date(date#(IAPUDT,'YYYYMMDD')))) >= $(vYearMin)
+//and exists(Fournisseur_Code, IASUNO); // test MAL 240615 pour réduir le nombre de ligns qu'on remonte. 
+;
+
+
+LEFT JOIN (FAITS_M3)
+
+DEVISE_V12:
+LOAD Distinct
+     CCDIVI as F_CodeSociete, 
+     CCLOCD as F_DeviseSociete
+FROM
+[$(vFolderM3)CMNDIV.QVD]
+(qvd);
+
+
+//Depot et fournisseur dans l'entete ou la ligne ??
+LEFT JOIN (FAITS_M3)
+LOAD
+	IBPUNO &'-'& IBPNLI &'-'& IBPNLS&'-'&IBSUNO&'-'&num(left(IBIDAT,4)) as %F_FGINLI_KEY, 
+	IBCONO as F_CodeGroupe, // jointure
+	IBPUNO as F_NumOA, 		// jointure
+	IBPNLI as F_NumLigneOA, // jointure
+	IBSUNO as F_CodeFournisseur, // jointure
+	IBWHLO as F_CodeDepot,	// jointure
+	IBITNO as F_CodeArticle,// jointure
+	num(left(IBIDAT,4)) as F_AnneeFacture,
+
+	IBATDT as F_DateDerniereActivite, 
+	IBCOCE as F_CentreDeCout, 
+	IBDWDT as F_DateLivraisonPlanifiée, 
+	IBELNO as F_ElementProjetLigneCommande, 
+	IBFACI as F_Etablissement, 
+	AutoNumberHash128(IBITNO) as %Article_id, 
+	
+	IBITNO as REF_EFI,/// utilisé pour l'applymap REFREG
+	IBIVQA as O_QuantitéFacturée, // utiliser pour la correction des données via le fichier Excel
+	
+	IBLNAM as F_MontantCommandeLigne, 
+	IBOEND as F_MarqueFinLigne, 
+	IBORQA as F_QuantitéAchetée, 
+	IBORTY as F_11, 
+	IBOURR as F_NumContratFournisseur, 
+	IBPITT as F_12, 
+	IBPNLS as F_NumSousLigneOA, 
+	IBPROJ as F_ProjetLigneCommande, 
+	IBPUPR as F_PrixUnitaireCommande, 
+	IBPUSL as F_StatutBasLOA, 
+	IBPUST as F_StatutHautLOA, 
+	IBRVQA as F_QuantitéRéceptionnéeOA, 
+	IBSDQA as F_13,
+	IBPUUN as F_UnitéCmd,
+////	ApplyMap('MAP_FGINLI', IBPUNO &'-'& IBPNLI &'-'& IBPNLS, null()) as F_PrixUnitaireFacturé,
+	IBPPUN as O_UnitéPrixAchat, // utiliser pour la correction fichier Excel
+//	if(IBPUUN = 'UP' and IBPPUN = 'MP' , '0,001' , 1) as #Facteur_Unite,
+
+	IBIDAT as F_DateFacture,
+	monthstart(date(date#(IBIDAT,'YYYYMMDD')))					as F_AnneeMoisFacture,
+	monthstart(date(date#(RangeMax(IBRCDT,IBIDAT),'YYYYMMDD')))	as F_AnneeMoisCloture,
+	monthstart(date(date#(RangeMax(IBRCDT,IBIDAT),'YYYYMMDD')))			as F_DateCloture // MAL 20/05/2015 modification monthstart à tester si cela fonctionne sinon enlever 
+FROM
+[$(vFolderM3)MPLINE.QVD]
+(qvd)
+;
+/***** modification HORS PROD: ramener la date de réception  *****/
+//left join
+//LOAD 
+//     ICFACI as F_Etablissement,  
+//     ICWHLO as F_CodeDepot,	// jointure 
+//     ICPUNO as F_NumOA, 		// jointure 
+//     ICPNLI as F_NumLigneOA, // jointure
+//     ICPNLS as F_NumSousLigneOA, // jointure 
+//    
+//     date(date#(ICTRDT,'YYYYMMDD')) as F_DateReception
+//FROM
+//[$(vFolderM3)MPLIND.QVD]
+//(qvd)
+//where ICCONO = 200
+//;
+
+right join(FAITS_M3)
+FGINLI:
+load
+	F5PUNO&'-'&F5PNLI&'-'&F5PNLS&'-'&F5SUNO&'-'&num(F5INYR) as %F_FGINLI_KEY,
+	F5SERA as FGINLI_Taux_Change,
+	F5IVOC as O_PrixUnitaireFacturé
+//	F5IVOC+(F5ADDG/F5IVQA) as F_PrixUnitaireFacturé
+	//((F5IVNA+F5ADDG)/F5IVQA)/F5SERA  as F_PrixUnitaireFacturé
+		
+FROM
+[$(vFolderM3)FGINLI.QVD]
+(qvd)
+WHERE 
+	F5INS1=3 and 
+	F5INS2=3 and 
+	F5INS3=3 and
+	F5INS4=3 and
+	F5INS5=4 
+;
+
+
+LEFT JOIN (FAITS_M3)
+LOAD 
+	MonthStart(DC_Date) as F_DateCloture,
+	//DC_Date		as F_DateCloture,
+	DC_FromCurr	as F_DeviseSociete,
+	DC_ToCurr	as F_DeviseGroupe,
+	DC_Rate		as F_TauxConsoGroupe
+RESIDENT Devises_Conso;
+
+LEFT JOIN (FAITS_M3)
+LOAD 
+	MonthStart(DC_Date) as F_DateCloture,
+	//DC_Date		as F_DateCloture,
+	DC_FromCurr	as F_DeviseSociete,
+	DC_ToCurr	as F_DeviseZone,
+	DC_Rate		as F_TauxConsoZone
+RESIDENT Devises_Conso;
+
+///$tab EXCEL
+/** 
+	Correction Escel sur la partie M3
+ Non Fonctionnel pour le moment. Aucune données remonte quand le code est selectionné
+**/
+
+left join (FAITS_M3)
+tmp_correction:
+LOAD 	
+	//(num(AHDIVI,'000')) 		as I_CodeSociete, 	// MAL 08/04/2015
+	//ApplyMap('Map_WHLO_FACI_M3',WAREHOUSE)	as F_Etablissement,
+     monthstart(makedate(YEAR,MONTH)) 		as F_AnneeMoisCommande,
+    // YEAR&MONTH							as AAAAMM,
+     WAREHOUSE 								as F_CodeDepot,
+     [NO OA] 								as F_NumOA,
+    // AutoNumberHash128([SUPPLIER CODE]) 	as %Fournisseur_id, 
+     //[SUPPLIER CODE]					as F_CodeFournisseur,
+     AutoNumberHash128([SUPPLIER CODE]) 	as %Fournisseur_id, 
+     //(REFERENCE) 						as F_CodeArticle, 
+     AutoNumberHash128(REFERENCE) 			as %Article_id, 
+     [PURCHASE UNIT]						as E_UnitéPrixAchat, 
+     ([MONTH QUANTITY]) 					as E_QuantitéFacturée, 
+     [UNIT PRICE] 							as E_PrixUnitaireFacturé,
+     //[UNIT PRICE]  							as E_PRU_EXCEL,
+     'M' 									as #FLAG_MODIF
+    // 'Excel'							as F_Type
+FROM
+[$(vFolderReferentialsUsers)Purchasing Corrections.xlsx]
+(ooxml, embedded labels, table is Corrections);
+
+//FAITS_M3_2:
+
+//store  FAITS_M3 into $(vFolderTransform)TRANSFORM_ACHATS_M3_PRODUCTION.qvd (qvd);
+
+FAITS_M3_2:
+LOAD  
+     %Fournisseur_id, 
+     %Article_id,
+     %F_FGINLI_KEY,
+     %Societe_ID,
+     F_CodeDepot, 
+     F_AnneeMoisCommande,
+     F_DeviseSociete, 
+     F_DateCloture, 
+      
+     F_CodeGroupe, 
+     F_NumOA, 
+     F_Etablissement, 
+     F_CodeFournisseur, 
+     F_CodeSociete, 
+     F_Type, 
+     F_Acheteur, 
+     F_DeviseOA, 
+      
+     F_TypeOA, 
+     F_DateCommande, 
+     F_StatutBasOA, 
+     F_StatutHautOA, 
+     F_NumLigneOA, 
+     F_CodeArticle, 
+     F_AnneeFacture, 
+     F_DateDerniereActivite, 
+     F_CentreDeCout, 
+     F_DateLivraisonPlanifiée, 
+     F_ElementProjetLigneCommande, 
+     REF_EFI, 
+     
+     F_MontantCommandeLigne, 
+     F_MarqueFinLigne, 
+     F_QuantitéAchetée, 
+     F_11, 
+     F_NumContratFournisseur, 
+     F_12, 
+     F_NumSousLigneOA, 
+     F_ProjetLigneCommande, 
+     F_PrixUnitaireCommande, 
+     F_StatutBasLOA, 
+     F_StatutHautLOA, 
+     F_QuantitéRéceptionnéeOA, 
+     F_13, 
+     F_UnitéCmd, 
+ 
+     F_DateFacture, 
+     F_AnneeMoisFacture, 
+     F_AnneeMoisCloture, 
+     FGINLI_Taux_Change, 
+     
+     F_DeviseGroupe, 
+     F_TauxConsoGroupe, 
+     F_DeviseZone, 
+     F_TauxConsoZone, 
+//     E_UnitéPrixAchat, 
+//     E_QuantitéFacturée_EXCEL, 
+//     E_PrixUnitaireFacturé, 
+
+     #FLAG_MODIF,
+     O_UnitéPrixAchat,
+    if( #FLAG_MODIF = 'M' ,  E_QuantitéFacturée, O_QuantitéFacturée) 		as  F_QuantitéFacturée,
+    if( #FLAG_MODIF = 'M' ,  E_PrixUnitaireFacturé, O_PrixUnitaireFacturé) 	as  F_PrixUnitaireFacturé,
+    if( #FLAG_MODIF = 'M' ,  E_UnitéPrixAchat, O_UnitéPrixAchat) 			as  F_UnitéPrixAchat,
+    
+//	ApplyMap('MAP_FGINLI', IBPUNO &'-'& IBPNLI &'-'& IBPNLS, null()) as F_PrixUnitaireFacturé,
+	if(F_UnitéCmd = 'UP' and if( #FLAG_MODIF = 'M' ,  E_UnitéPrixAchat, O_UnitéPrixAchat) = 'MP' , '0,001' , 1) as #Facteur_Unite
+	
+Resident FAITS_M3;
+Drop table FAITS_M3;
+
+///$tab FAITS M3
+//////**************************************** FINALISER LA CREATION DE LA TABLE DE FAIT M3
+
+Rename table FAITS_M3_2 to FAITS_M3;
+
+store  FAITS_M3 into $(vFolderTransform)TRANSFORM_ACHATS_FAITS_M3_PRODUCTION.qvd (qvd);
+///$tab TMP FAITS M3 
+//
+//SET vDepotHP_M3 = '105' ,'305','405','505'; // depots hors prod 
+//
+//drop Fields F_DeviseSociete,F_DeviseGroupe,F_TauxConsoGroupe,F_TauxConsoZone,F_DeviseZone;
+//TMP_FAITS_M3:
+//load *,
+////	ApplyMap('Map_Societe_DeviseZone',F_CodeSociete,'NA')	as F_DeviseZone,
+////	'EUR' 													as F_DeviseGroupe,
+//	ApplyMap('Map_Societe_Zone',F_CodeSociete,'NA')			as F_Zone, 
+//	ApplyMap('Map_Societe_Pays',F_CodeSociete,'NA')			as F_Pays
+//Resident FAITS_M3;
+//inner join
+//LOAD Distinct
+//     CCDIVI as F_CodeSociete, 
+//     if(CCDIVI = '005' , 'EUR', CCLOCD ) as F_DeviseSociete,
+//     'EUR' 	as F_DeviseGroupe,
+//     ApplyMap('Map_Societe_DeviseZone',CCDIVI,'NA')	as F_DeviseZone
+//Resident DEVISE_V12; // a voir sous m3
+//DROP TABLE FAITS_M3;
+//
+//
+//JOIN (TMP_FAITS_M3)
+//LOAD 
+//	//DC_Date		as F_DateCloture,
+//	MonthStart(DC_Date) as F_DateCloture,
+//	DC_FromCurr	as F_DeviseSociete,
+//	DC_ToCurr	as F_DeviseGroupe,
+//	DC_Rate		as F_TauxConsoGroupe
+//RESIDENT Devises_Conso;
+//
+//JOIN (TMP_FAITS_M3)
+//LOAD 
+////	DC_Date		as F_DateCloture,
+//	MonthStart(DC_Date) as F_DateCloture,
+//	DC_FromCurr	as F_DeviseSociete,
+//	DC_ToCurr	as F_DeviseZone,
+//	DC_Rate		as F_TauxConsoZone
+//RESIDENT Devises_Conso;
+//
+//FAITS_2:
+//LOAD
+//	*,
+////	if(WildMatch(F_CodeDepot,$(vDepotHP_M3)), 1 , 0) 			as %F_FLAG_DEPOT_010,
+//	//ApplyMap('Map_Devise_Societe',F_CodeSociete,'NA')		as F_DeviseSociete,
+////	ApplyMap('Map_Societe_Zone',F_CodeSociete,'NA')			as F_Zone, 
+////	ApplyMap('Map_Societe_Pays',F_CodeSociete,'NA')			as F_Pays,
+//	
+// // if(isnull(F_PRU_Infocentre),
+//				If (F_DateFacture='' or isnull(F_DateFacture),
+//					F_MontantCommandeLigne ,
+//					F_QuantitéFacturée * F_PrixUnitaireFacturé * #Facteur_Unite  // modification F_PrixUnitaireCommande MAL 26/03/2015
+//				)
+//				//,(F_QuantitéFacturée)* F_PRU_Infocentre
+//		//	) 							
+//			as F_MontantAchatLigneCorrige_SOC,
+//
+// 	//if(isnull(F_PRU_Infocentre),
+//				If (F_DateFacture='' or isnull(F_DateFacture),
+//					F_MontantCommandeLigne,
+//					F_QuantitéFacturée * F_PrixUnitaireFacturé * #Facteur_Unite  // modification F_PrixUnitaireCommande MAL 26/03/2015
+//				)
+//				//,F_QuantitéFacturée* F_PRU_Infocentre
+//			//)  
+//				* 	F_TauxConsoZone as F_MontantAchatLigneCorrige_ZONE,
+//	
+//	
+//	
+//	//if(isnull(F_PRU_Infocentre),
+//				If (F_DateFacture='' or isnull(F_DateFacture),
+//					F_MontantCommandeLigne,
+//					F_QuantitéFacturée * F_PrixUnitaireFacturé * #Facteur_Unite  // modification F_PrixUnitaireCommande MAL 26/03/2015
+//				)
+//				//,(F_QuantitéFacturée)* F_PRU_Infocentre
+//			//)  
+//			* F_TauxConsoGroupe					
+//			as F_MontantAchatLigneCorrige_GROUPE,
+//	
+//
+//
+//	/****************************************/
+//	
+//	if(F_PrixUnitaireFacturé <> F_PrixUnitaireCommande, 'PU_DIFF', if(F_PrixUnitaireFacturé = F_PrixUnitaireCommande,'PU_EG')) as F_FlagPU
+//	
+//RESIDENT TMP_FAITS_M3;
+//
+//
+//
+//
+//DROP TABLE TMP_FAITS_M3;
+//
+////Drop table Devises_Conso;
+//
+//RENAME TABLE FAITS_2 TO FAITS_M3;
+//
+//////////////////////////////////////////////////////// trouver la correspondance sous M3 de l'article de regroupement
+//
+//
+//LEFT JOIN (FAITS_M3)
+//COREFACH : 
+//LOAD 
+//	AutoNumberHash128(CARACH) 	as %Article_id,
+//	//num(CADIVI,'000') 			as %Societe_ID,
+//	CARREG 
+//FROM
+//[$(vFolderINFOCENTRE)COREFACH.QVD]
+//(qvd);
+//
+//// REFERENCE DE REGROUPEMENT
+//
+//LEFT JOIN 
+//LOAD DISTINCT
+//	%Societe_ID,
+//	%Article_id,
+//	if ( isnull(CARREG) or not Exists (CARREG) or len(trim(CARREG))=0
+//		,F_CodeArticle
+//		,Applymap('MAP_COREFACH',%Societe_ID&'-'&F_CodeArticle,F_CodeArticle)
+//		) as F_RgptArticle
+//RESIDENT FAITS_M3;
+//
+//
